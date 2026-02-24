@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac Mini Status</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Menlo', monospace;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 20px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #21262d;
+  }
+  header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+  header h1 span { color: #8b949e; font-weight: 400; font-size: 14px; }
+  .refresh-info {
+    font-size: 12px;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #3fb950;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .connection-lost {
+    background: #f8514920;
+    border: 1px solid #f85149;
+    color: #f85149;
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-align: center;
+    margin-bottom: 16px;
+    display: none;
+    font-size: 13px;
+  }
+
+  /* System stats */
+  .system-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .stat-card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8b949e;
+    margin-bottom: 6px;
+  }
+  .stat-card .value {
+    font-size: 22px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+  .stat-card .sub {
+    font-size: 11px;
+    color: #8b949e;
+    margin-top: 4px;
+  }
+  .progress-bar {
+    height: 6px;
+    background: #21262d;
+    border-radius: 3px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .fill-green { background: #3fb950; }
+  .fill-yellow { background: #d29922; }
+  .fill-red { background: #f85149; }
+
+  /* Service groups */
+  .group {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #21262d;
+  }
+  .group-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+  .group-summary {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+  }
+  .summary-ok { background: #3fb95020; color: #3fb950; }
+  .summary-warn { background: #d2992220; color: #d29922; }
+  .summary-err { background: #f8514920; color: #f85149; }
+
+  .service-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid #21262d14;
+    transition: background 0.2s;
+  }
+  .service-row:last-child { border-bottom: none; }
+  .service-row:hover { background: #1c2128; }
+  .service-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .service-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: #8b949e;
+  }
+  .service-pid { min-width: 70px; text-align: right; }
+  .service-schedule { min-width: 140px; }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    min-width: 80px;
+    justify-content: center;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+  .badge-ok { background: #3fb95018; color: #3fb950; }
+  .badge-ok .status-dot { background: #3fb950; }
+  .badge-warning { background: #d2992218; color: #d29922; }
+  .badge-warning .status-dot { background: #d29922; }
+  .badge-error { background: #f8514918; color: #f85149; }
+  .badge-error .status-dot { background: #f85149; }
+  .badge-idle { background: #8b949e18; color: #8b949e; }
+  .badge-idle .status-dot { background: #8b949e; }
+
+  .log-snippet {
+    padding: 8px 16px 12px 16px;
+    background: #0d1117;
+    border-top: 1px solid #21262d;
+  }
+  .log-snippet pre {
+    font-size: 11px;
+    color: #f85149;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 16px;
+    font-size: 11px;
+    color: #484f58;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    .system-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card .value { font-size: 18px; }
+    .service-meta { gap: 8px; }
+    .service-schedule { display: none; }
+    .service-pid { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mac Mini Status <span>justinpaulson</span></h1>
+  <div class="refresh-info">
+    <span id="last-updated">Just now</span>
+    <div class="pulse" id="pulse"></div>
+  </div>
+</header>
+
+<div class="connection-lost" id="connection-lost">Connection to status server lost</div>
+
+<% cpu_used = (data[:system][:cpu][:user] + data[:system][:cpu][:sys]).round(1) %>
+<% mem_pct = data[:system][:memory][:total] > 0 ? ((data[:system][:memory][:used].to_f / data[:system][:memory][:total]) * 100).round(1) : 0 %>
+<% disk_pct = data[:system][:disk][:capacity]&.to_s&.gsub('%','')&.to_f || 0 %>
+
+<div class="system-stats" id="system-stats">
+  <div class="stat-card">
+    <div class="label">CPU</div>
+    <div class="value"><%= cpu_used %>%</div>
+    <div class="sub"><%= data[:system][:cpu][:user] %>% user / <%= data[:system][:cpu][:sys] %>% sys</div>
+    <div class="progress-bar">
+      <div class="fill <%= cpu_used > 90 ? 'fill-red' : cpu_used > 70 ? 'fill-yellow' : 'fill-green' %>"
+           style="width: <%= cpu_used %>%"></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Memory</div>
+    <div class="value"><%= mem_pct %>%</div>
+    <div class="sub"><%= (data[:system][:memory][:used] / 1073741824.0).round(1) %> GB / <%= (data[:system][:memory][:total] / 1073741824.0).round(1) %> GB</div>
+    <div class="progress-bar">
+      <div class="fill <%= mem_pct > 90 ? 'fill-red' : mem_pct > 70 ? 'fill-yellow' : 'fill-green' %>"
+           style="width: <%= mem_pct %>%"></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Disk</div>
+    <div class="value"><%= data[:system][:disk][:capacity] %></div>
+    <div class="sub"><%= data[:system][:disk][:used] %> / <%= data[:system][:disk][:size] %></div>
+    <div class="progress-bar">
+      <div class="fill <%= disk_pct > 90 ? 'fill-red' : disk_pct > 70 ? 'fill-yellow' : 'fill-green' %>"
+           style="width: <%= disk_pct %>%"></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Uptime</div>
+    <div class="value" style="font-size:16px"><%= data[:system][:uptime] %></div>
+    <div class="sub">Load: <%= data[:system][:load][:one] %> / <%= data[:system][:load][:five] %> / <%= data[:system][:load][:fifteen] %></div>
+  </div>
+</div>
+
+<% data[:services].each do |key, group| %>
+<%
+  services = group[:services]
+  ok_count = services.count { |s| s[:status] == "ok" }
+  total = services.size
+  has_errors = services.any? { |s| s[:status] == "error" }
+  has_warnings = services.any? { |s| s[:status] == "warning" }
+  summary_class = has_errors ? "summary-err" : has_warnings ? "summary-warn" : "summary-ok"
+%>
+<div class="group" data-group="<%= key %>">
+  <div class="group-header">
+    <h2><%= group[:label] %></h2>
+    <span class="group-summary <%= summary_class %>"><%= ok_count %>/<%= total %> operational</span>
+  </div>
+  <% services.each do |svc| %>
+  <%
+    badge_class = case svc[:status]
+    when "ok" then "badge-ok"
+    when "warning" then "badge-warning"
+    when "error" then "badge-error"
+    else "badge-idle"
+    end
+    if svc[:status] == "ok" && svc[:state] == "idle"
+      badge_class = "badge-idle"
+    end
+    state_label = case svc[:state]
+    when "running" then "Running"
+    when "idle" then "Idle"
+    when "stopped" then "Stopped"
+    when "unloaded" then "Unloaded"
+    else "Unknown"
+    end
+    if svc[:listener_missing]
+      state_label = "No Listener"
+    end
+  %>
+  <div class="service-row" data-service="<%= svc[:id] %>">
+    <span class="service-name"><%= svc[:name] %></span>
+    <div class="service-meta">
+      <% if svc[:schedule] %>
+        <span class="service-schedule"><%= svc[:schedule] %></span>
+      <% end %>
+      <% if svc[:pid] %>
+        <span class="service-pid">PID <%= svc[:pid] %></span>
+      <% end %>
+      <span class="status-badge <%= badge_class %>">
+        <span class="status-dot"></span>
+        <%= state_label %>
+      </span>
+    </div>
+  </div>
+  <% if svc[:recent_log] && svc[:recent_log].any? %>
+  <div class="log-snippet" data-log-for="<%= svc[:id] %>">
+    <pre><%= svc[:recent_log].join("\n") %></pre>
+  </div>
+  <% end %>
+  <% end %>
+</div>
+<% end %>
+
+<div class="footer">
+  Generated at <%= data[:generated_at] %> &middot; Refreshes every 15s
+</div>
+
+<script>
+(function() {
+  var lastUpdate = Date.now();
+  var failCount = 0;
+
+  function updateTimestamp() {
+    var secs = Math.round((Date.now() - lastUpdate) / 1000);
+    var el = document.getElementById('last-updated');
+    if (secs < 2) el.textContent = 'Just now';
+    else if (secs < 60) el.textContent = secs + 's ago';
+    else el.textContent = Math.round(secs / 60) + 'm ago';
+  }
+
+  function statusBadgeClass(status, state) {
+    if (status === 'ok' && state === 'idle') return 'badge-idle';
+    if (status === 'ok') return 'badge-ok';
+    if (status === 'warning') return 'badge-warning';
+    if (status === 'error') return 'badge-error';
+    return 'badge-idle';
+  }
+
+  function stateLabel(svc) {
+    if (svc.listener_missing) return 'No Listener';
+    if (svc.state === 'running') return 'Running';
+    if (svc.state === 'idle') return 'Idle';
+    if (svc.state === 'stopped') return 'Stopped';
+    if (svc.state === 'unloaded') return 'Unloaded';
+    return 'Unknown';
+  }
+
+  function summaryClass(services) {
+    var hasErr = services.some(function(s) { return s.status === 'error'; });
+    var hasWarn = services.some(function(s) { return s.status === 'warning'; });
+    if (hasErr) return 'summary-err';
+    if (hasWarn) return 'summary-warn';
+    return 'summary-ok';
+  }
+
+  function fillClass(pct) {
+    if (pct > 90) return 'fill-red';
+    if (pct > 70) return 'fill-yellow';
+    return 'fill-green';
+  }
+
+  function refresh() {
+    fetch('/api/status')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        failCount = 0;
+        lastUpdate = Date.now();
+        document.getElementById('connection-lost').style.display = 'none';
+        document.getElementById('pulse').style.background = '#3fb950';
+
+        // Update system stats
+        var sys = data.system;
+        var cpuUsed = (sys.cpu.user + sys.cpu.sys).toFixed(1);
+        var memPct = sys.memory.total > 0 ? ((sys.memory.used / sys.memory.total) * 100).toFixed(1) : 0;
+        var diskPct = parseFloat((sys.disk.capacity || '0').replace('%', ''));
+
+        var cards = document.querySelectorAll('#system-stats .stat-card');
+        if (cards[0]) {
+          cards[0].querySelector('.value').textContent = cpuUsed + '%';
+          cards[0].querySelector('.sub').textContent = sys.cpu.user + '% user / ' + sys.cpu.sys + '% sys';
+          var cpuFill = cards[0].querySelector('.fill');
+          cpuFill.style.width = cpuUsed + '%';
+          cpuFill.className = 'fill ' + fillClass(cpuUsed);
+        }
+        if (cards[1]) {
+          cards[1].querySelector('.value').textContent = memPct + '%';
+          cards[1].querySelector('.sub').textContent = (sys.memory.used / 1073741824).toFixed(1) + ' GB / ' + (sys.memory.total / 1073741824).toFixed(1) + ' GB';
+          var memFill = cards[1].querySelector('.fill');
+          memFill.style.width = memPct + '%';
+          memFill.className = 'fill ' + fillClass(memPct);
+        }
+        if (cards[2]) {
+          cards[2].querySelector('.value').textContent = sys.disk.capacity;
+          cards[2].querySelector('.sub').textContent = sys.disk.used + ' / ' + sys.disk.size;
+          var dskFill = cards[2].querySelector('.fill');
+          dskFill.style.width = diskPct + '%';
+          dskFill.className = 'fill ' + fillClass(diskPct);
+        }
+        if (cards[3]) {
+          cards[3].querySelector('.value').textContent = sys.uptime;
+          cards[3].querySelector('.sub').textContent = 'Load: ' + sys.load.one + ' / ' + sys.load.five + ' / ' + sys.load.fifteen;
+        }
+
+        // Update service groups
+        Object.keys(data.services).forEach(function(key) {
+          var group = data.services[key];
+          var groupEl = document.querySelector('[data-group="' + key + '"]');
+          if (!groupEl) return;
+
+          var services = group.services;
+          var okCount = services.filter(function(s) { return s.status === 'ok'; }).length;
+          var summaryEl = groupEl.querySelector('.group-summary');
+          summaryEl.textContent = okCount + '/' + services.length + ' operational';
+          summaryEl.className = 'group-summary ' + summaryClass(services);
+
+          services.forEach(function(svc) {
+            var row = groupEl.querySelector('[data-service="' + svc.id + '"]');
+            if (!row) return;
+
+            var badge = row.querySelector('.status-badge');
+            badge.className = 'status-badge ' + statusBadgeClass(svc.status, svc.state);
+            badge.innerHTML = '<span class="status-dot"></span> ' + stateLabel(svc);
+
+            var pidEl = row.querySelector('.service-pid');
+            if (pidEl) {
+              pidEl.textContent = svc.pid ? 'PID ' + svc.pid : '';
+            }
+
+            // Update log snippet
+            var logEl = groupEl.querySelector('[data-log-for="' + svc.id + '"]');
+            if (svc.recent_log && svc.recent_log.length > 0) {
+              if (!logEl) {
+                logEl = document.createElement('div');
+                logEl.className = 'log-snippet';
+                logEl.setAttribute('data-log-for', svc.id);
+                logEl.innerHTML = '<pre></pre>';
+                row.after(logEl);
+              }
+              logEl.querySelector('pre').textContent = svc.recent_log.join('\n');
+              logEl.style.display = '';
+            } else if (logEl) {
+              logEl.style.display = 'none';
+            }
+          });
+        });
+
+        // Update footer
+        document.querySelector('.footer').textContent = 'Generated at ' + data.generated_at + ' \u00b7 Refreshes every 15s';
+      })
+      .catch(function() {
+        failCount++;
+        if (failCount >= 2) {
+          document.getElementById('connection-lost').style.display = 'block';
+          document.getElementById('pulse').style.background = '#f85149';
+        }
+      });
+  }
+
+  setInterval(refresh, 15000);
+  setInterval(updateTimestamp, 1000);
+})();
+</script>
+</body>
+</html>
