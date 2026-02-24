@@ -4,6 +4,7 @@ require_relative 'lib/service_checker'
 require_relative 'lib/system_stats'
 require_relative 'lib/log_reader'
 require_relative 'lib/html_renderer'
+require_relative 'lib/favicon_renderer'
 
 PORT = ENV.fetch('PORT', 9999).to_i
 
@@ -62,8 +63,19 @@ loop do
                    "Content-Type: text/plain\r\n" \
                    "Content-Length: #{body.bytesize}\r\n" \
                    "Connection: close\r\n\r\n#{body}"
+      elsif path == '/favicon.svg'
+        data = StatusPage.collect_all
+        all_ok = data[:services].values.all? { |g|
+          g[:services].all? { |s| s[:status] == "ok" }
+        }
+        body = FaviconRenderer.render(all_ok)
+        conn.print "HTTP/1.1 200 OK\r\n" \
+                   "Content-Type: image/svg+xml\r\n" \
+                   "Content-Length: #{body.bytesize}\r\n" \
+                   "Cache-Control: no-cache\r\n" \
+                   "Connection: close\r\n\r\n#{body}"
       elsif path == '/favicon.ico'
-        conn.print "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+        conn.print "HTTP/1.1 301 Moved Permanently\r\nLocation: /favicon.svg\r\nConnection: close\r\n\r\n"
       else
         data = StatusPage.collect_all
         body = HtmlRenderer.render(data)

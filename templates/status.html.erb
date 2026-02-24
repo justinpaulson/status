@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mac Mini Status</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -455,6 +456,14 @@
             }
           });
         });
+
+        // Update favicon based on overall status
+        var allOk = Object.keys(data.services).every(function(key) {
+          return data.services[key].services.every(function(s) { return s.status === 'ok'; });
+        });
+        var link = document.querySelector('link[rel="icon"]');
+        if (link) link.href = '/favicon.svg?t=' + Date.now();
+        document.title = (allOk ? '\u2705 ' : '\ud83d\udd34 ') + 'Mac Mini Status';
 
         // Update footer
         document.querySelector('.footer').textContent = 'Generated at ' + data.generated_at + ' \u00b7 Refreshes every 15s';
