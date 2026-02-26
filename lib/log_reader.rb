@@ -13,6 +13,11 @@ module LogReader
     end
   end
 
+  def self.tail(log_path, num_lines = 100)
+    return nil unless log_path && File.exist?(log_path)
+    `tail -n #{num_lines.to_i} #{Shellwords.escape(log_path)} 2>/dev/null`
+  end
+
   def self.last_modified(log_path)
     return nil unless log_path && File.exist?(log_path)
     File.mtime(log_path)

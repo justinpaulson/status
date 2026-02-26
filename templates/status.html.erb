@@ -196,6 +196,108 @@
     line-height: 1.5;
   }
 
+  .log-btn {
+    background: none;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    font-size: 11px;
+    font-family: inherit;
+    padding: 2px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .log-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+  /* Log viewer panel */
+  .log-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100;
+  }
+  .log-overlay.open { display: block; }
+  .log-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(700px, 90vw);
+    background: #0d1117;
+    border-left: 1px solid #30363d;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+  }
+  .log-panel.open { transform: translateX(0); }
+  .log-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #21262d;
+    flex-shrink: 0;
+  }
+  .log-panel-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+  .log-panel-header .log-meta {
+    font-size: 11px;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .log-panel-close {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .log-panel-close:hover { color: #f0f6fc; }
+  .log-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    line-height: 1.6;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .log-panel-body .log-loading {
+    color: #8b949e;
+    font-style: italic;
+  }
+  .log-panel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-top: 1px solid #21262d;
+    font-size: 11px;
+    color: #8b949e;
+    flex-shrink: 0;
+  }
+  .log-stream-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #3fb950;
+    display: inline-block;
+    animation: pulse 2s infinite;
+    margin-right: 6px;
+  }
+
   .footer {
     text-align: center;
     padding: 16px;
@@ -262,6 +364,22 @@
     <div class="value" style="font-size:16px"><%= data[:system][:uptime] %></div>
     <div class="sub">Load: <%= data[:system][:load][:one] %> / <%= data[:system][:load][:five] %> / <%= data[:system][:load][:fifteen] %></div>
   </div>
+  <div class="stat-card" id="docker-card">
+    <div class="label">Docker</div>
+    <% if data[:system][:docker][:running] %>
+      <div class="value" style="font-size:16px; color: #3fb950;">Running</div>
+      <div class="sub">v<%= data[:system][:docker][:version] %></div>
+    <% else %>
+      <div class="value" style="font-size:16px; color: #f85149;">Stopped</div>
+      <div class="sub">
+        <% if data[:system][:docker][:orbstack_installed] %>
+          <button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start OrbStack</button>
+        <% else %>
+          OrbStack not installed
+        <% end %>
+      </div>
+    <% end %>
+  </div>
 </div>
 
 <% data[:services].each do |key, group| %>
@@ -300,7 +418,7 @@
       state_label = "No Listener"
     end
   %>
-  <div class="service-row" data-service="<%= svc[:id] %>">
+  <div class="service-row" data-service="<%= svc[:id] %>" data-has-log="<%= svc[:has_log] ? 'true' : 'false' %>">
     <span class="service-name"><%= svc[:name] %></span>
     <div class="service-meta">
       <% if svc[:schedule] %>
@@ -308,6 +426,9 @@
       <% end %>
       <% if svc[:pid] %>
         <span class="service-pid">PID <%= svc[:pid] %></span>
+      <% end %>
+      <% if svc[:has_log] %>
+        <button class="log-btn" onclick="openLogs('<%= svc[:id] %>', '<%= svc[:name] %>'); event.stopPropagation();">logs</button>
       <% end %>
       <span class="status-badge <%= badge_class %>">
         <span class="status-dot"></span>
@@ -324,11 +445,80 @@
 </div>
 <% end %>
 
+<div class="log-overlay" id="log-overlay" onclick="closeLogs()"></div>
+<div class="log-panel" id="log-panel">
+  <div class="log-panel-header">
+    <div>
+      <h3 id="log-panel-title">Logs</h3>
+    </div>
+    <button class="log-panel-close" onclick="closeLogs()">&times;</button>
+  </div>
+  <div class="log-panel-body" id="log-panel-body">
+    <span class="log-loading">Loading logs...</span>
+  </div>
+  <div class="log-panel-footer">
+    <span><span class="log-stream-dot"></span>Auto-refreshing every 3s</span>
+    <span id="log-panel-updated"></span>
+  </div>
+</div>
+
 <div class="footer">
   Generated at <%= data[:generated_at] %> &middot; Refreshes every 15s
 </div>
 
 <script>
+var _logInterval = null;
+var _logServiceId = null;
+
+function openLogs(serviceId, serviceName) {
+  _logServiceId = serviceId;
+  document.getElementById('log-panel-title').textContent = serviceName + ' — Logs';
+  document.getElementById('log-panel-body').innerHTML = '<span class="log-loading">Loading logs...</span>';
+  document.getElementById('log-overlay').classList.add('open');
+  document.getElementById('log-panel').classList.add('open');
+  fetchLogs();
+  _logInterval = setInterval(fetchLogs, 3000);
+}
+
+function closeLogs() {
+  _logServiceId = null;
+  document.getElementById('log-overlay').classList.remove('open');
+  document.getElementById('log-panel').classList.remove('open');
+  if (_logInterval) { clearInterval(_logInterval); _logInterval = null; }
+}
+
+function fetchLogs() {
+  if (!_logServiceId) return;
+  fetch('/api/logs?service=' + encodeURIComponent(_logServiceId) + '&lines=200')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var body = document.getElementById('log-panel-body');
+      var wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 30;
+      body.textContent = data.lines || 'No log output.';
+      if (wasAtBottom) body.scrollTop = body.scrollHeight;
+      document.getElementById('log-panel-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    })
+    .catch(function() {
+      document.getElementById('log-panel-body').innerHTML = '<span class="log-loading">Failed to load logs.</span>';
+    });
+}
+
+function startDocker() {
+  var btn = document.getElementById('start-docker-btn');
+  if (btn) {
+    btn.textContent = 'Starting...';
+    btn.disabled = true;
+  }
+  fetch('/api/docker/start', { method: 'POST' })
+    .catch(function() {
+      if (btn) { btn.textContent = 'Start OrbStack'; btn.disabled = false; }
+    });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeLogs();
+});
+
 (function() {
   var lastUpdate = Date.now();
   var failCount = 0;
@@ -414,6 +604,24 @@
           cards[3].querySelector('.sub').textContent = 'Load: ' + sys.load.one + ' / ' + sys.load.five + ' / ' + sys.load.fifteen;
         }
 
+        // Update Docker card
+        var dockerCard = document.getElementById('docker-card');
+        if (dockerCard && sys.docker) {
+          if (sys.docker.running) {
+            dockerCard.querySelector('.value').textContent = 'Running';
+            dockerCard.querySelector('.value').style.color = '#3fb950';
+            dockerCard.querySelector('.sub').textContent = 'v' + sys.docker.version;
+          } else {
+            dockerCard.querySelector('.value').textContent = 'Stopped';
+            dockerCard.querySelector('.value').style.color = '#f85149';
+            if (sys.docker.orbstack_installed) {
+              dockerCard.querySelector('.sub').innerHTML = '<button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start OrbStack</button>';
+            } else {
+              dockerCard.querySelector('.sub').textContent = 'OrbStack not installed';
+            }
+          }
+        }
+
         // Update service groups
         Object.keys(data.services).forEach(function(key) {
           var group = data.services[key];
@@ -439,6 +647,15 @@
               pidEl.textContent = svc.pid ? 'PID ' + svc.pid : '';
             }
 
+            // Ensure log button exists for services with logs
+            if (svc.has_log && !row.querySelector('.log-btn')) {
+              var btn = document.createElement('button');
+              btn.className = 'log-btn';
+              btn.textContent = 'logs';
+              btn.onclick = function(e) { openLogs(svc.id, svc.name); e.stopPropagation(); };
+              row.querySelector('.service-meta').insertBefore(btn, badge);
+            }
+
             // Update log snippet
             var logEl = groupEl.querySelector('[data-log-for="' + svc.id + '"]');
             if (svc.recent_log && svc.recent_log.length > 0) {
@@ -460,7 +677,7 @@
         // Update favicon based on overall status
         var allOk = Object.keys(data.services).every(function(key) {
           return data.services[key].services.every(function(s) { return s.status === 'ok'; });
-        });
+        }) && data.system.docker && data.system.docker.running;
         var link = document.querySelector('link[rel="icon"]');
         if (link) link.href = '/favicon.svg?t=' + Date.now();
         document.title = (allOk ? '\u2705 ' : '\ud83d\udd34 ') + 'Mac Mini Status';

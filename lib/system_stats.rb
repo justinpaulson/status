@@ -7,7 +7,8 @@ module SystemStats
       cpu: parse_cpu,
       memory: parse_memory,
       disk: parse_disk,
-      load: parse_load
+      load: parse_load,
+      docker: parse_docker
     }
   end
 
@@ -60,6 +61,16 @@ module SystemStats
       { one: $1.to_f, five: $2.to_f, fifteen: $3.to_f }
     else
       { one: 0, five: 0, fifteen: 0 }
+    end
+  end
+
+  def self.parse_docker
+    version = `timeout 3 docker info --format '{{.ServerVersion}}' 2>/dev/null`.strip
+    if $?.success? && !version.empty?
+      { running: true, version: version }
+    else
+      orbstack_installed = File.exist?('/Applications/OrbStack.app')
+      { running: false, orbstack_installed: orbstack_installed }
     end
   end
 end

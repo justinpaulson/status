@@ -84,6 +84,15 @@ module ServiceChecker
     }
   }
 
+  def self.log_path_for(service_id)
+    SERVICES.each_value do |group|
+      group[:services].each do |svc|
+        return svc[:log] if svc[:id] == service_id && svc[:log]
+      end
+    end
+    nil
+  end
+
   def self.check_all
     raw = `launchctl list 2>/dev/null`
     launchd_state = parse_launchctl(raw)
@@ -130,7 +139,7 @@ module ServiceChecker
       if entry[:pid]
         result[:state] = "running"
         result[:pid] = entry[:pid]
-        result[:status] = entry[:exit_status] == 0 ? "ok" : "warning"
+        result[:status] = "ok"
       else
         result[:state] = "stopped"
         result[:status] = "error"
@@ -167,6 +176,7 @@ module ServiceChecker
 
     # Log info
     if svc[:log]
+      result[:has_log] = File.exist?(svc[:log])
       result[:log_modified] = LogReader.last_modified(svc[:log])&.iso8601
       if result[:status] != "ok"
         result[:recent_log] = LogReader.tail_errors(svc[:log], 5)
