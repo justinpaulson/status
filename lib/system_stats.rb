@@ -1,4 +1,5 @@
 require 'shellwords'
+require 'timeout'
 
 module SystemStats
   def self.collect
@@ -65,12 +66,17 @@ module SystemStats
   end
 
   def self.parse_docker
-    version = `timeout 3 docker info --format '{{.ServerVersion}}' 2>/dev/null`.strip
+    version = Timeout.timeout(3) {
+      `docker info --format '{{.ServerVersion}}' 2>/dev/null`.strip
+    }
     if $?.success? && !version.empty?
       { running: true, version: version }
     else
       orbstack_installed = File.exist?('/Applications/OrbStack.app')
       { running: false, orbstack_installed: orbstack_installed }
     end
+  rescue Timeout::Error
+    orbstack_installed = File.exist?('/Applications/OrbStack.app')
+    { running: false, orbstack_installed: orbstack_installed }
   end
 end
