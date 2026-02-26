@@ -9,6 +9,20 @@ require_relative 'lib/favicon_renderer'
 
 PORT = ENV.fetch('PORT', 9999).to_i
 
+APPLE_TOUCH_ICON = File.binread(File.join(__dir__, 'public', 'apple-touch-icon.png')).freeze
+
+MANIFEST_JSON = JSON.generate({
+  name: "Mac Mini Status",
+  short_name: "Status",
+  start_url: "/",
+  display: "standalone",
+  background_color: "#0d1117",
+  theme_color: "#0d1117",
+  icons: [
+    { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }
+  ]
+}).freeze
+
 module StatusPage
   @cache = nil
   @cache_at = Time.at(0)
@@ -114,6 +128,19 @@ loop do
                    "Connection: close\r\n\r\n#{body}"
       elsif path == '/favicon.ico'
         conn.print "HTTP/1.1 301 Moved Permanently\r\nLocation: /favicon.svg\r\nConnection: close\r\n\r\n"
+      elsif path == '/apple-touch-icon.png'
+        conn.print "HTTP/1.1 200 OK\r\n" \
+                   "Content-Type: image/png\r\n" \
+                   "Content-Length: #{APPLE_TOUCH_ICON.bytesize}\r\n" \
+                   "Cache-Control: public, max-age=86400\r\n" \
+                   "Connection: close\r\n\r\n"
+        conn.write APPLE_TOUCH_ICON
+      elsif path == '/manifest.json'
+        conn.print "HTTP/1.1 200 OK\r\n" \
+                   "Content-Type: application/manifest+json\r\n" \
+                   "Content-Length: #{MANIFEST_JSON.bytesize}\r\n" \
+                   "Cache-Control: public, max-age=86400\r\n" \
+                   "Connection: close\r\n\r\n#{MANIFEST_JSON}"
       else
         data = StatusPage.collect_all
         body = HtmlRenderer.render(data)
