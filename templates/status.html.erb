@@ -110,6 +110,50 @@
   .fill-yellow { background: #d29922; }
   .fill-red { background: #f85149; }
 
+  /* Claude Code usage */
+  .claude-usage-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .claude-usage-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .claude-usage-label {
+    font-size: 12px;
+    color: #8b949e;
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+  .claude-usage-bar {
+    flex: 1;
+    height: 8px;
+    background: #21262d;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .claude-usage-bar .fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+  .claude-usage-pct {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f0f6fc;
+    min-width: 52px;
+    text-align: right;
+  }
+  .claude-usage-reset {
+    font-size: 11px;
+    color: #484f58;
+    min-width: 90px;
+    text-align: right;
+  }
+
   /* Service groups */
   .group {
     background: #161b22;
@@ -388,6 +432,52 @@
   </div>
 </div>
 
+<%
+  cc = data[:claude_code]
+  cc_available = cc[:available]
+  cc_fill = ->(pct) { pct > 80 ? 'fill-red' : pct > 50 ? 'fill-yellow' : 'fill-green' }
+  cc_reset = ->(iso) {
+    return '' unless iso
+    t = Time.parse(iso)
+    diff = t - Time.now
+    if diff <= 0
+      'now'
+    elsif diff < 3600
+      "#{(diff / 60).round}m"
+    elsif diff < 86400
+      "#{(diff / 3600).round}h"
+    else
+      "#{(diff / 86400).round}d"
+    end
+  }
+  cc_weekly = cc_available && cc[:weekly] ? cc[:weekly] : { utilization: 0, resets_at: nil }
+  cc_session = cc_available && cc[:session] ? cc[:session] : { utilization: 0, resets_at: nil }
+%>
+<div class="group" id="claude-code-group">
+  <div class="group-header">
+    <h2>Claude Code</h2>
+    <span class="group-summary <%= cc_available ? 'summary-ok' : 'summary-err' %>" id="cc-summary"><%= cc_available ? 'Usage' : 'Disconnected' %></span>
+  </div>
+  <div class="claude-usage-body">
+    <div class="claude-usage-row" id="cc-weekly-row">
+      <span class="claude-usage-label">Weekly</span>
+      <div class="claude-usage-bar">
+        <div class="fill <%= cc_fill.call(cc_weekly[:utilization]) %>" style="width: <%= cc_weekly[:utilization] %>%"></div>
+      </div>
+      <span class="claude-usage-pct"><%= cc_weekly[:utilization].round %>%</span>
+      <span class="claude-usage-reset"><%= cc_weekly[:resets_at] ? "resets #{cc_reset.call(cc_weekly[:resets_at])}" : '' %></span>
+    </div>
+    <div class="claude-usage-row" id="cc-session-row">
+      <span class="claude-usage-label">5-Hour</span>
+      <div class="claude-usage-bar">
+        <div class="fill <%= cc_fill.call(cc_session[:utilization]) %>" style="width: <%= cc_session[:utilization] %>%"></div>
+      </div>
+      <span class="claude-usage-pct"><%= cc_session[:utilization].round %>%</span>
+      <span class="claude-usage-reset"><%= cc_session[:resets_at] ? "resets #{cc_reset.call(cc_session[:resets_at])}" : '' %></span>
+    </div>
+  </div>
+</div>
+
 <% data[:services].each do |key, group| %>
 <%
   services = group[:services]
@@ -625,6 +715,41 @@ document.addEventListener('keydown', function(e) {
             } else {
               dockerCard.querySelector('.sub').textContent = 'OrbStack not installed';
             }
+          }
+        }
+
+        // Update Claude Code usage
+        var ccSummary = document.getElementById('cc-summary');
+        if (ccSummary) {
+          var ccFill = function(pct) { return pct > 80 ? 'fill-red' : pct > 50 ? 'fill-yellow' : 'fill-green'; };
+          var ccReset = function(iso) {
+            if (!iso) return '';
+            var diff = (new Date(iso) - Date.now()) / 1000;
+            if (diff <= 0) return 'now';
+            if (diff < 3600) return Math.round(diff / 60) + 'm';
+            if (diff < 86400) return Math.round(diff / 3600) + 'h';
+            return Math.round(diff / 86400) + 'd';
+          };
+          function updateRow(rowId, obj) {
+            var row = document.getElementById(rowId);
+            if (!row) return;
+            var fill = row.querySelector('.fill');
+            var pct = obj ? obj.utilization : 0;
+            fill.style.width = pct + '%';
+            fill.className = 'fill ' + ccFill(pct);
+            row.querySelector('.claude-usage-pct').textContent = Math.round(pct) + '%';
+            row.querySelector('.claude-usage-reset').textContent = obj && obj.resets_at ? 'resets ' + ccReset(obj.resets_at) : '';
+          }
+          if (data.claude_code && data.claude_code.available) {
+            ccSummary.textContent = 'Usage';
+            ccSummary.className = 'group-summary summary-ok';
+            updateRow('cc-weekly-row', data.claude_code.weekly);
+            updateRow('cc-session-row', data.claude_code.session);
+          } else {
+            ccSummary.textContent = 'Disconnected';
+            ccSummary.className = 'group-summary summary-err';
+            updateRow('cc-weekly-row', null);
+            updateRow('cc-session-row', null);
           }
         }
 

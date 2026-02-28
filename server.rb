@@ -6,6 +6,7 @@ require_relative 'lib/system_stats'
 require_relative 'lib/log_reader'
 require_relative 'lib/html_renderer'
 require_relative 'lib/favicon_renderer'
+require_relative 'lib/claude_stats'
 
 PORT = ENV.fetch('PORT', 9999).to_i
 
@@ -35,6 +36,7 @@ module StatusPage
     @cache = {
       system: SystemStats.collect,
       services: ServiceChecker.check_all,
+      claude_code: ClaudeStats.collect,
       generated_at: Time.now.strftime('%Y-%m-%d %H:%M:%S %Z')
     }
     @cache_at = Time.now
