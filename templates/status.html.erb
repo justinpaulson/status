@@ -451,7 +451,12 @@
 <%
   cc = data[:claude_code]
   cc_available = cc[:available]
-  cc_fill = ->(pct) { pct > 80 ? 'fill-red' : pct > 50 ? 'fill-yellow' : 'fill-green' }
+  cc_fill = ->(pct, pace) {
+    return 'fill-green' if pace.nil?
+    effective_pace = [pace, 5].max
+    ratio = pct / effective_pace
+    ratio >= 1.1 ? 'fill-red' : ratio >= 0.85 ? 'fill-yellow' : 'fill-green'
+  }
   cc_reset = ->(iso) {
     return '' unless iso
     t = Time.parse(iso)
@@ -484,9 +489,9 @@
   <div class="claude-usage-body">
     <div class="claude-usage-row" id="cc-weekly-row">
       <span class="claude-usage-label">Weekly</span>
+      <% wp = cc_pace.call(cc_weekly[:resets_at], 604800) %>
       <div class="claude-usage-bar">
-        <div class="fill <%= cc_fill.call(cc_weekly[:utilization]) %>" style="width: <%= cc_weekly[:utilization] %>%"></div>
-        <% wp = cc_pace.call(cc_weekly[:resets_at], 604800) %>
+        <div class="fill <%= cc_fill.call(cc_weekly[:utilization], wp) %>" style="width: <%= cc_weekly[:utilization] %>%"></div>
         <div class="claude-pace-marker" style="left: <%= wp || 0 %>%<%= wp ? '' : '; display: none' %>"></div>
       </div>
       <span class="claude-usage-pct"><%= cc_weekly[:utilization].round %>%</span>
@@ -494,9 +499,9 @@
     </div>
     <div class="claude-usage-row" id="cc-session-row">
       <span class="claude-usage-label">5-Hour</span>
+      <% sp = cc_pace.call(cc_session[:resets_at], 18000) %>
       <div class="claude-usage-bar">
-        <div class="fill <%= cc_fill.call(cc_session[:utilization]) %>" style="width: <%= cc_session[:utilization] %>%"></div>
-        <% sp = cc_pace.call(cc_session[:resets_at], 18000) %>
+        <div class="fill <%= cc_fill.call(cc_session[:utilization], sp) %>" style="width: <%= cc_session[:utilization] %>%"></div>
         <div class="claude-pace-marker" style="left: <%= sp || 0 %>%<%= sp ? '' : '; display: none' %>"></div>
       </div>
       <span class="claude-usage-pct"><%= cc_session[:utilization].round %>%</span>
@@ -750,7 +755,14 @@ document.addEventListener('keydown', function(e) {
         // Update Claude Code usage
         var ccSummary = document.getElementById('cc-summary');
         if (ccSummary) {
-          var ccFill = function(pct) { return pct > 80 ? 'fill-red' : pct > 50 ? 'fill-yellow' : 'fill-green'; };
+          var ccFill = function(pct, pace) {
+            if (pace === null || pace === undefined) return 'fill-green';
+            var effectivePace = Math.max(pace, 5);
+            var ratio = pct / effectivePace;
+            if (ratio >= 1.1) return 'fill-red';
+            if (ratio >= 0.85) return 'fill-yellow';
+            return 'fill-green';
+          };
           var ccReset = function(iso) {
             if (!iso) return '';
             var diff = (new Date(iso) - Date.now()) / 1000;
@@ -772,13 +784,13 @@ document.addEventListener('keydown', function(e) {
             if (!row) return;
             var fill = row.querySelector('.fill');
             var pct = obj ? obj.utilization : 0;
+            var pace = obj ? ccPace(obj.resets_at, periodSecs) : null;
             fill.style.width = pct + '%';
-            fill.className = 'fill ' + ccFill(pct);
+            fill.className = 'fill ' + ccFill(pct, pace);
             row.querySelector('.claude-usage-pct').textContent = Math.round(pct) + '%';
             row.querySelector('.claude-usage-reset').textContent = obj && obj.resets_at ? 'resets ' + ccReset(obj.resets_at) : '';
             var marker = row.querySelector('.claude-pace-marker');
             if (marker) {
-              var pace = obj ? ccPace(obj.resets_at, periodSecs) : null;
               if (pace !== null) {
                 marker.style.left = pace + '%';
                 marker.style.display = '';
