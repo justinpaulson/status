@@ -9,7 +9,7 @@ dashboard:
 
 # Optional features (set to true to enable)
 features:
-  docker: false                   # Show Docker/OrbStack status card
+  docker: false                   # Show Docker status card (supports OrbStack and Docker Desktop)
   claude_code: false              # Show Claude Code usage section
 
 # Service groups to monitor

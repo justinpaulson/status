@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Status Dashboard - LaunchAgent for an SSH reverse tunnel.
+  This exposes your local status dashboard to a remote server.
+  Copy to ~/Library/LaunchAgents/ and customize the values below.
+
+  To load:   launchctl load ~/Library/LaunchAgents/com.status-dashboard.tunnel.plist
+  To unload: launchctl unload ~/Library/LaunchAgents/com.status-dashboard.tunnel.plist
+-->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.justinpaulson.status-tunnel</string>
+    <string>com.status-dashboard.tunnel</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/ssh</string>
@@ -18,10 +26,13 @@
         <string>-o</string>
         <string>StrictHostKeyChecking=accept-new</string>
         <string>-R</string>
+        <!-- Remote port 9998 forwards to local port 9999 -->
         <string>0.0.0.0:9998:localhost:9999</string>
         <string>-i</string>
-        <string>/Users/justinpaulson/.ssh/corre-prod.pem</string>
-        <string>ubuntu@54.221.142.206</string>
+        <!-- Replace with your SSH key path -->
+        <string>/Users/YOUR_USERNAME/.ssh/your_key.pem</string>
+        <!-- Replace with your remote server -->
+        <string>YOUR_USER@YOUR_SERVER_IP</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -30,8 +41,8 @@
     <key>ThrottleInterval</key>
     <integer>30</integer>
     <key>StandardOutPath</key>
-    <string>/Users/justinpaulson/Developer/status/log/tunnel.log</string>
+    <string>/path/to/status/log/tunnel.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/justinpaulson/Developer/status/log/tunnel.log</string>
+    <string>/path/to/status/log/tunnel.log</string>
 </dict>
 </plist>

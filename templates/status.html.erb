@@ -436,10 +436,10 @@
     <% else %>
       <div class="value" style="font-size:16px; color: #f85149;">Stopped</div>
       <div class="sub">
-        <% if data[:system][:docker][:orbstack_installed] %>
-          <button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start OrbStack</button>
+        <% if data[:system][:docker][:docker_app] %>
+          <button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start <%= data[:system][:docker][:docker_app] %></button>
         <% else %>
-          OrbStack not installed
+          Docker not installed
         <% end %>
       </div>
     <% end %>
@@ -630,12 +630,13 @@ function fetchLogs() {
 function startDocker() {
   var btn = document.getElementById('start-docker-btn');
   if (btn) {
+    btn.dataset.originalText = btn.textContent;
     btn.textContent = 'Starting...';
     btn.disabled = true;
   }
   fetch('/api/docker/start', { method: 'POST' })
     .catch(function() {
-      if (btn) { btn.textContent = 'Start OrbStack'; btn.disabled = false; }
+      if (btn) { btn.textContent = btn.dataset.originalText || 'Start Docker'; btn.disabled = false; }
     });
 }
 
@@ -738,10 +739,10 @@ document.addEventListener('keydown', function(e) {
           } else {
             dockerCard.querySelector('.value').textContent = 'Stopped';
             dockerCard.querySelector('.value').style.color = '#f85149';
-            if (sys.docker.orbstack_installed) {
-              dockerCard.querySelector('.sub').innerHTML = '<button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start OrbStack</button>';
+            if (sys.docker.docker_app) {
+              dockerCard.querySelector('.sub').innerHTML = '<button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start ' + sys.docker.docker_app + '</button>';
             } else {
-              dockerCard.querySelector('.sub').textContent = 'OrbStack not installed';
+              dockerCard.querySelector('.sub').textContent = 'Docker not installed';
             }
           }
         }

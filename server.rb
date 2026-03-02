@@ -131,7 +131,9 @@ loop do
                    "Connection: close\r\n\r\n#{body}"
       elsif _method == 'POST' && path == '/api/docker/start'
         if Config.feature?(:docker)
-          system('open -a OrbStack')
+          docker_data = StatusPage.collect_all[:system][:docker] || {}
+          app_name = docker_data[:docker_app] || "Docker"
+          system("open -a #{app_name.shellescape}")
           body = JSON.generate({ status: 'starting' })
           conn.print "HTTP/1.1 200 OK\r\n" \
                      "Content-Type: application/json; charset=utf-8\r\n" \

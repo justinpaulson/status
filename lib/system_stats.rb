@@ -74,11 +74,19 @@ module SystemStats
     if $?.success? && !version.empty?
       { running: true, version: version }
     else
-      orbstack_installed = File.exist?('/Applications/OrbStack.app')
-      { running: false, orbstack_installed: orbstack_installed }
+      detect_docker_app
     end
   rescue Timeout::Error
-    orbstack_installed = File.exist?('/Applications/OrbStack.app')
-    { running: false, orbstack_installed: orbstack_installed }
+    detect_docker_app
+  end
+
+  def self.detect_docker_app
+    if File.exist?('/Applications/OrbStack.app')
+      { running: false, docker_app: "OrbStack", orbstack_installed: true }
+    elsif File.exist?('/Applications/Docker.app')
+      { running: false, docker_app: "Docker", orbstack_installed: false }
+    else
+      { running: false, docker_app: nil, orbstack_installed: false }
+    end
   end
 end

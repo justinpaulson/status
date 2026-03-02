@@ -1,17 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Status Dashboard - LaunchAgent for the server process.
+  Copy to ~/Library/LaunchAgents/ and customize the paths below.
+
+  To find your Ruby path:  which ruby
+  To load:   launchctl load ~/Library/LaunchAgents/com.status-dashboard.server.plist
+  To unload: launchctl unload ~/Library/LaunchAgents/com.status-dashboard.server.plist
+-->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.justinpaulson.mac-status</string>
+    <string>com.status-dashboard.server</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/justinpaulson/.local/share/mise/installs/ruby/3.3.6/bin/ruby</string>
-        <string>/Users/justinpaulson/Developer/status/server.rb</string>
+        <!-- Replace with your Ruby path (run: which ruby) -->
+        <string>/usr/bin/ruby</string>
+        <string>/path/to/status/server.rb</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/justinpaulson/Developer/status</string>
+    <string>/path/to/status</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -19,15 +28,16 @@
     <key>ThrottleInterval</key>
     <integer>10</integer>
     <key>StandardOutPath</key>
-    <string>/Users/justinpaulson/Developer/status/log/status-server.log</string>
+    <string>/path/to/status/log/status-server.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/justinpaulson/Developer/status/log/status-server.log</string>
+    <string>/path/to/status/log/status-server.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/Users/justinpaulson/.local/share/mise/installs/ruby/3.3.6/bin:/Users/justinpaulson/.local/share/mise/shims:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <!-- Include your Ruby's bin dir and common paths -->
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>HOME</key>
-        <string>/Users/justinpaulson</string>
+        <string>/Users/YOUR_USERNAME</string>
         <key>LANG</key>
         <string>en_US.UTF-8</string>
         <key>LC_ALL</key>
