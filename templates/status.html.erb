@@ -133,12 +133,25 @@
     height: 8px;
     background: #21262d;
     border-radius: 4px;
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
   }
   .claude-usage-bar .fill {
     height: 100%;
     border-radius: 4px;
     transition: width 0.5s ease;
+    overflow: hidden;
+  }
+  .claude-pace-marker {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: #f85149;
+    border-radius: 1px;
+    transition: left 0.5s ease;
+    z-index: 1;
+    pointer-events: none;
   }
   .claude-usage-pct {
     font-size: 18px;
@@ -450,6 +463,13 @@
       "#{(diff / 86400).round}d"
     end
   }
+  cc_pace = ->(iso, period_secs) {
+    return nil unless iso
+    t = Time.parse(iso)
+    elapsed = period_secs - (t - Time.now)
+    pct = (elapsed / period_secs.to_f) * 100
+    pct.clamp(0, 100)
+  }
   cc_weekly = cc_available && cc[:weekly] ? cc[:weekly] : { utilization: 0, resets_at: nil }
   cc_session = cc_available && cc[:session] ? cc[:session] : { utilization: 0, resets_at: nil }
 %>
@@ -463,6 +483,8 @@
       <span class="claude-usage-label">Weekly</span>
       <div class="claude-usage-bar">
         <div class="fill <%= cc_fill.call(cc_weekly[:utilization]) %>" style="width: <%= cc_weekly[:utilization] %>%"></div>
+        <% wp = cc_pace.call(cc_weekly[:resets_at], 604800) %>
+        <div class="claude-pace-marker" style="left: <%= wp || 0 %>%<%= wp ? '' : '; display: none' %>"></div>
       </div>
       <span class="claude-usage-pct"><%= cc_weekly[:utilization].round %>%</span>
       <span class="claude-usage-reset"><%= cc_weekly[:resets_at] ? "resets #{cc_reset.call(cc_weekly[:resets_at])}" : '' %></span>
@@ -471,6 +493,8 @@
       <span class="claude-usage-label">5-Hour</span>
       <div class="claude-usage-bar">
         <div class="fill <%= cc_fill.call(cc_session[:utilization]) %>" style="width: <%= cc_session[:utilization] %>%"></div>
+        <% sp = cc_pace.call(cc_session[:resets_at], 18000) %>
+        <div class="claude-pace-marker" style="left: <%= sp || 0 %>%<%= sp ? '' : '; display: none' %>"></div>
       </div>
       <span class="claude-usage-pct"><%= cc_session[:utilization].round %>%</span>
       <span class="claude-usage-reset"><%= cc_session[:resets_at] ? "resets #{cc_reset.call(cc_session[:resets_at])}" : '' %></span>
@@ -730,7 +754,15 @@ document.addEventListener('keydown', function(e) {
             if (diff < 86400) return Math.round(diff / 3600) + 'h';
             return Math.round(diff / 86400) + 'd';
           };
-          function updateRow(rowId, obj) {
+          var ccPace = function(iso, periodSecs) {
+            if (!iso) return null;
+            var resetTime = new Date(iso).getTime();
+            var now = Date.now();
+            var elapsed = periodSecs * 1000 - (resetTime - now);
+            var pct = (elapsed / (periodSecs * 1000)) * 100;
+            return Math.max(0, Math.min(100, pct));
+          };
+          function updateRow(rowId, obj, periodSecs) {
             var row = document.getElementById(rowId);
             if (!row) return;
             var fill = row.querySelector('.fill');
@@ -739,17 +771,27 @@ document.addEventListener('keydown', function(e) {
             fill.className = 'fill ' + ccFill(pct);
             row.querySelector('.claude-usage-pct').textContent = Math.round(pct) + '%';
             row.querySelector('.claude-usage-reset').textContent = obj && obj.resets_at ? 'resets ' + ccReset(obj.resets_at) : '';
+            var marker = row.querySelector('.claude-pace-marker');
+            if (marker) {
+              var pace = obj ? ccPace(obj.resets_at, periodSecs) : null;
+              if (pace !== null) {
+                marker.style.left = pace + '%';
+                marker.style.display = '';
+              } else {
+                marker.style.display = 'none';
+              }
+            }
           }
           if (data.claude_code && data.claude_code.available) {
             ccSummary.textContent = 'Usage';
             ccSummary.className = 'group-summary summary-ok';
-            updateRow('cc-weekly-row', data.claude_code.weekly);
-            updateRow('cc-session-row', data.claude_code.session);
+            updateRow('cc-weekly-row', data.claude_code.weekly, 604800);
+            updateRow('cc-session-row', data.claude_code.session, 18000);
           } else {
             ccSummary.textContent = 'Disconnected';
             ccSummary.className = 'group-summary summary-err';
-            updateRow('cc-weekly-row', null);
-            updateRow('cc-session-row', null);
+            updateRow('cc-weekly-row', null, 604800);
+            updateRow('cc-session-row', null, 18000);
           }
         }
 
