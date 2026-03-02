@@ -1,0 +1,54 @@
+# Status Dashboard Configuration
+# Copy this file to config.yml and customize for your environment.
+
+# Dashboard display settings
+dashboard:
+  title: "My Status Dashboard"    # Page title and PWA name
+  subtitle: "hostname"            # Optional subtitle shown in header
+  port: 9999                      # Server port (overridden by PORT env var)
+
+# Optional features (set to true to enable)
+features:
+  docker: false                   # Show Docker/OrbStack status card
+  claude_code: false              # Show Claude Code usage section
+
+# Service groups to monitor
+# Each group contains a label and a list of services.
+# Service types:
+#   daemon    - long-running process, should always have a PID
+#   runner    - GitHub Actions runner (checks for Runner.Listener process)
+#   scheduled - runs on a schedule, "idle" when not running is normal
+#   process   - checks for a running process by name via `ps`
+services:
+  my_services:
+    label: "My Services"
+    services:
+      - id: "com.example.my-service"
+        name: "My Service"
+        type: daemon
+        log: "~/logs/my-service.log"
+
+      - id: "com.example.my-cron"
+        name: "My Scheduled Task"
+        type: scheduled
+        schedule: "Every 30 min"
+        log: "~/logs/my-cron.log"
+
+  # Example: GitHub Actions self-hosted runners
+  # runners:
+  #   label: "GitHub Actions Runners"
+  #   services:
+  #     - id: "actions.runner.myorg-myrepo.my-runner"
+  #       name: "myrepo"
+  #       type: runner
+  #       log: "~/Library/Logs/actions.runner.myorg-myrepo.my-runner/stdout.log"
+
+  # Example: process-based monitoring (checks `ps` for the process name)
+  # background:
+  #   label: "Background Processes"
+  #   services:
+  #     - id: "my-worker"
+  #       name: "Worker Process"
+  #       type: process
+  #       process: "my-worker"
+  #       log: "~/logs/worker.log"

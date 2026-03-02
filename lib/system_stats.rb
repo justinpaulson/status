@@ -1,16 +1,18 @@
 require 'shellwords'
 require 'timeout'
+require_relative 'config'
 
 module SystemStats
   def self.collect
-    {
+    result = {
       uptime: parse_uptime,
       cpu: parse_cpu,
       memory: parse_memory,
       disk: parse_disk,
       load: parse_load,
-      docker: parse_docker
     }
+    result[:docker] = parse_docker if Config.feature?(:docker)
+    result
   end
 
   def self.parse_uptime

@@ -1,19 +1,23 @@
 require 'socket'
 require 'json'
 require 'uri'
+require_relative 'lib/config'
 require_relative 'lib/service_checker'
 require_relative 'lib/system_stats'
 require_relative 'lib/log_reader'
 require_relative 'lib/html_renderer'
 require_relative 'lib/favicon_renderer'
-require_relative 'lib/claude_stats'
 
-PORT = ENV.fetch('PORT', 9999).to_i
+if Config.feature?(:claude_code)
+  require_relative 'lib/claude_stats'
+end
+
+PORT = ENV.fetch('PORT', Config.dashboard[:port]).to_i
 
 APPLE_TOUCH_ICON = File.binread(File.join(__dir__, 'public', 'apple-touch-icon.png')).freeze
 
 MANIFEST_JSON = JSON.generate({
-  name: "Mac Mini Status",
+  name: Config.dashboard[:title],
   short_name: "Status",
   start_url: "/",
   display: "standalone",
@@ -36,9 +40,12 @@ module StatusPage
     @cache = {
       system: SystemStats.collect,
       services: ServiceChecker.check_all,
-      claude_code: ClaudeStats.collect,
+      config: Config.dashboard.merge(features: Config.features),
       generated_at: Time.now.strftime('%Y-%m-%d %H:%M:%S %Z')
     }
+    if Config.feature?(:claude_code)
+      @cache[:claude_code] = ClaudeStats.collect
+    end
     @cache_at = Time.now
     @cache
   end
@@ -112,7 +119,10 @@ loop do
         data = StatusPage.collect_all
         all_ok = data[:services].values.all? { |g|
           g[:services].all? { |s| s[:status] == "ok" }
-        } && data[:system][:docker][:running]
+        }
+        if Config.feature?(:docker)
+          all_ok = all_ok && data[:system][:docker][:running]
+        end
         body = FaviconRenderer.render(all_ok)
         conn.print "HTTP/1.1 200 OK\r\n" \
                    "Content-Type: image/svg+xml\r\n" \
@@ -120,14 +130,22 @@ loop do
                    "Cache-Control: no-cache\r\n" \
                    "Connection: close\r\n\r\n#{body}"
       elsif _method == 'POST' && path == '/api/docker/start'
-        system('open -a OrbStack')
-        body = JSON.generate({ status: 'starting' })
-        conn.print "HTTP/1.1 200 OK\r\n" \
-                   "Content-Type: application/json; charset=utf-8\r\n" \
-                   "Content-Length: #{body.bytesize}\r\n" \
-                   "Cache-Control: no-cache\r\n" \
-                   "Access-Control-Allow-Origin: *\r\n" \
-                   "Connection: close\r\n\r\n#{body}"
+        if Config.feature?(:docker)
+          system('open -a OrbStack')
+          body = JSON.generate({ status: 'starting' })
+          conn.print "HTTP/1.1 200 OK\r\n" \
+                     "Content-Type: application/json; charset=utf-8\r\n" \
+                     "Content-Length: #{body.bytesize}\r\n" \
+                     "Cache-Control: no-cache\r\n" \
+                     "Access-Control-Allow-Origin: *\r\n" \
+                     "Connection: close\r\n\r\n#{body}"
+        else
+          body = JSON.generate({ error: 'Docker feature not enabled' })
+          conn.print "HTTP/1.1 404 Not Found\r\n" \
+                     "Content-Type: application/json\r\n" \
+                     "Content-Length: #{body.bytesize}\r\n" \
+                     "Connection: close\r\n\r\n#{body}"
+        end
       elsif path == '/favicon.ico'
         conn.print "HTTP/1.1 301 Moved Permanently\r\nLocation: /favicon.svg\r\nConnection: close\r\n\r\n"
       elsif path == '/apple-touch-icon.png'
