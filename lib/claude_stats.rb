@@ -4,21 +4,51 @@ require 'net/http'
 require 'uri'
 
 module ClaudeStats
+  CACHE_TTL = 60 # 1 minute
+  BACKOFF_TTL = 300 # 5 minutes on transient failure
+  CACHE_FILE = File.join(__dir__, '..', '.claude_stats_cache.json')
+
   @cache = nil
   @cache_at = Time.at(0)
-  CACHE_TTL = 60 # 1 minute
+  @last_good = nil
 
   def self.collect
     return @cache if @cache && (Time.now - @cache_at) < CACHE_TTL
-    @cache = fetch_usage
-    @cache_at = Time.now
+    @last_good ||= load_cached
+    result = fetch_usage
+    if result[:available]
+      result[:fetched_at] = Time.now.utc.iso8601
+      @last_good = result
+      save_cached(result)
+      @cache = result
+      @cache_at = Time.now
+    else
+      # Use last good data if available, otherwise show unavailable
+      @cache = @last_good || result
+      # Back off longer on failure to avoid hammering a rate-limited endpoint
+      @cache_at = Time.now - CACHE_TTL + BACKOFF_TTL
+    end
     @cache
   rescue => e
     $stderr.puts "#{Time.now} ClaudeStats error: #{e.class}: #{e.message}"
-    { available: false }
+    @last_good || { available: false }
   end
 
   private
+
+  def self.load_cached
+    return nil unless File.exist?(CACHE_FILE)
+    data = JSON.parse(File.read(CACHE_FILE), symbolize_names: true)
+    data[:available] ? data : nil
+  rescue
+    nil
+  end
+
+  def self.save_cached(result)
+    File.write(CACHE_FILE, JSON.generate(result))
+  rescue
+    nil
+  end
 
   def self.fetch_usage
     token = read_oauth_token
@@ -36,7 +66,10 @@ module ClaudeStats
     req['Content-Type'] = 'application/json'
 
     resp = http.request(req)
-    return { available: false } unless resp.is_a?(Net::HTTPSuccess)
+    unless resp.is_a?(Net::HTTPSuccess)
+      $stderr.puts "#{Time.now} ClaudeStats API #{resp.code}: #{resp.body[0..200]}"
+      return { available: false }
+    end
 
     data = JSON.parse(resp.body)
 

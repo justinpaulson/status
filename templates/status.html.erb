@@ -196,6 +196,12 @@
   .summary-ok { background: #3fb95020; color: #3fb950; }
   .summary-warn { background: #d2992220; color: #d29922; }
   .summary-err { background: #f8514920; color: #f85149; }
+  .cc-updated {
+    font-size: 11px;
+    color: #8b949e;
+    margin-left: 4px;
+  }
+  .cc-updated.stale { color: #d29922; }
 
   .service-row {
     display: flex;
@@ -485,6 +491,9 @@
   <div class="group-header">
     <h2>Claude Code</h2>
     <span class="group-summary <%= cc_available ? 'summary-ok' : 'summary-err' %>" id="cc-summary"><%= cc_available ? 'Usage' : 'Disconnected' %></span>
+    <% if cc_available && cc[:fetched_at] %>
+      <span class="cc-updated" id="cc-updated" data-fetched-at="<%= cc[:fetched_at] %>">just now</span>
+    <% end %>
   </div>
   <div class="claude-usage-body">
     <div class="claude-usage-row" id="cc-weekly-row">
@@ -692,6 +701,25 @@ document.addEventListener('keydown', function(e) {
     return 'fill-green';
   }
 
+  function updateCcTimestamp(fetchedAt) {
+    var el = document.getElementById('cc-updated');
+    if (!el && fetchedAt) {
+      el = document.createElement('span');
+      el.id = 'cc-updated';
+      el.className = 'cc-updated';
+      var header = document.querySelector('#claude-code-group .group-header');
+      if (header) header.appendChild(el);
+    }
+    if (!el) return;
+    if (!fetchedAt) { el.textContent = ''; return; }
+    el.setAttribute('data-fetched-at', fetchedAt);
+    var ageSecs = (Date.now() - new Date(fetchedAt).getTime()) / 1000;
+    if (ageSecs < 60) el.textContent = 'just now';
+    else if (ageSecs < 3600) el.textContent = Math.round(ageSecs / 60) + 'm ago';
+    else el.textContent = Math.round(ageSecs / 3600) + 'h ago';
+    el.className = ageSecs > 120 ? 'cc-updated stale' : 'cc-updated';
+  }
+
   function refresh() {
     fetch('/api/status')
       .then(function(r) { return r.json(); })
@@ -804,11 +832,13 @@ document.addEventListener('keydown', function(e) {
             ccSummary.className = 'group-summary summary-ok';
             updateRow('cc-weekly-row', data.claude_code.weekly, 604800);
             updateRow('cc-session-row', data.claude_code.session, 18000);
+            updateCcTimestamp(data.claude_code.fetched_at);
           } else {
             ccSummary.textContent = 'Disconnected';
             ccSummary.className = 'group-summary summary-err';
             updateRow('cc-weekly-row', null, 604800);
             updateRow('cc-session-row', null, 18000);
+            updateCcTimestamp(null);
           }
         }
 
@@ -890,6 +920,12 @@ document.addEventListener('keydown', function(e) {
 
   setInterval(refresh, 15000);
   setInterval(updateTimestamp, 1000);
+  setInterval(function() {
+    var el = document.getElementById('cc-updated');
+    if (el && el.getAttribute('data-fetched-at')) {
+      updateCcTimestamp(el.getAttribute('data-fetched-at'));
+    }
+  }, 15000);
 })();
 </script>
 </body>

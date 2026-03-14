@@ -2,4 +2,5 @@ log/
 *.log
 .DS_Store
 config.yml
+.claude_stats_cache.json
 tmp/
