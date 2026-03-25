@@ -85,7 +85,7 @@ loop do
 
       # Determine auth state for this request
       authed_email = Auth.authenticated_email(cookie_header)
-      is_authenticated = authed_email && Auth.allowed?(authed_email)
+      is_authenticated = !!(authed_email && Auth.allowed?(authed_email))
       auth_enabled = Auth.auth_configured?
 
       if _method == 'POST' && path == '/api/auth'
