@@ -34,6 +34,11 @@ module Config
     @data[:features] || {}
   end
 
+  def self.auth
+    ensure_loaded
+    @data[:auth] || {}
+  end
+
   def self.feature?(name)
     ensure_loaded
     features[name.to_sym] == true

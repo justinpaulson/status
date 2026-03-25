@@ -12,6 +12,11 @@ features:
   docker: false                   # Show Docker status card (supports OrbStack and Docker Desktop)
   claude_code: false              # Show Claude Code usage section
 
+# Authentication (optional) — protect service details and logs behind Google login
+# auth:
+#   google_client_id: "YOUR_CLIENT_ID.apps.googleusercontent.com"
+#   allowed_email: "you@gmail.com"
+
 # Service groups to monitor
 # Each group contains a label and a list of services.
 # Service types:

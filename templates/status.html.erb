@@ -11,6 +11,9 @@
 <meta name="apple-mobile-web-app-title" content="<%= data[:config][:title] %>">
 <meta name="theme-color" content="#0d1117">
 <link rel="manifest" href="/manifest.json">
+<% if data[:auth_enabled] %>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<% end %>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -431,6 +434,48 @@
     overflow-y: auto;
   }
 
+  /* Auth styles */
+  .auth-status {
+    font-size: 12px;
+    color: #8b949e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .auth-status .auth-email {
+    color: #58a6ff;
+  }
+  .logout-btn {
+    background: none;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    font-size: 11px;
+    font-family: inherit;
+    padding: 2px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .logout-btn:hover { border-color: #f85149; color: #f85149; }
+  .auth-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 16px;
+    text-align: center;
+  }
+  .auth-prompt p {
+    color: #8b949e;
+    font-size: 13px;
+  }
+  .auth-prompt .auth-loading {
+    color: #8b949e;
+    font-size: 13px;
+    font-style: italic;
+  }
+
   @media (max-width: 600px) {
     body { padding: 12px; }
     .system-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -445,9 +490,15 @@
 
 <header>
   <h1><%= data[:config][:title] %><% if data[:config][:subtitle] %> <span><%= data[:config][:subtitle] %></span><% end %></h1>
-  <div class="refresh-info">
-    <span id="last-updated">Just now</span>
-    <div class="pulse" id="pulse"></div>
+  <div style="display: flex; align-items: center; gap: 16px;">
+    <div class="auth-status" id="auth-status" style="display: none;">
+      <span class="auth-email" id="auth-email"></span>
+      <button class="logout-btn" onclick="logout()">logout</button>
+    </div>
+    <div class="refresh-info">
+      <span id="last-updated">Just now</span>
+      <div class="pulse" id="pulse"></div>
+    </div>
   </div>
 </header>
 
@@ -637,13 +688,136 @@ var _logInterval = null;
 var _logServiceId = null;
 var _lastData = null;
 var _openGroupKey = null;
+var _isAuthenticated = false;
+var _authEnabled = <%= data[:auth_enabled] ? 'true' : 'false' %>;
+var _googleClientId = '<%= data[:google_client_id] || '' %>';
+var _pendingGroupKey = null;
 
 function openGroupDetail(groupKey) {
   _openGroupKey = groupKey;
   if (!_lastData || !_lastData.services || !_lastData.services[groupKey]) return;
+
+  if (_authEnabled && !_isAuthenticated) {
+    _pendingGroupKey = groupKey;
+    showAuthPrompt(groupKey);
+    return;
+  }
+
   renderDetailModal(groupKey, _lastData.services[groupKey]);
   document.getElementById('detail-overlay').classList.add('open');
   document.getElementById('detail-modal').classList.add('open');
+}
+
+function showAuthPrompt(groupKey) {
+  var group = _lastData.services[groupKey];
+  document.getElementById('detail-modal-title').textContent = group.label;
+  var sumEl = document.getElementById('detail-modal-summary');
+  sumEl.textContent = 'Login Required';
+  sumEl.className = 'group-summary summary-warn';
+
+  var html = '<div class="auth-prompt">';
+  html += '<p>Sign in with Google to view service details, PIDs, and logs.</p>';
+  html += '<div id="google-signin-container">';
+  if (typeof google !== 'undefined' && google.accounts) {
+    html += '</div></div>';
+    document.getElementById('detail-modal-body').innerHTML = html;
+    renderGoogleButton();
+  } else {
+    html += '<span class="auth-loading">Loading Google Sign-In...</span>';
+    html += '</div></div>';
+    document.getElementById('detail-modal-body').innerHTML = html;
+    // Retry when library loads
+    var checkInterval = setInterval(function() {
+      if (typeof google !== 'undefined' && google.accounts) {
+        clearInterval(checkInterval);
+        document.querySelector('.auth-loading').remove();
+        renderGoogleButton();
+      }
+    }, 200);
+    setTimeout(function() { clearInterval(checkInterval); }, 10000);
+  }
+
+  document.getElementById('detail-overlay').classList.add('open');
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function renderGoogleButton() {
+  if (!_googleClientId || typeof google === 'undefined') return;
+  google.accounts.id.initialize({
+    client_id: _googleClientId,
+    callback: handleGoogleSignIn
+  });
+  google.accounts.id.renderButton(
+    document.getElementById('google-signin-container'),
+    { theme: 'filled_black', size: 'large', shape: 'pill' }
+  );
+}
+
+function handleGoogleSignIn(response) {
+  fetch('/api/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id_token: response.credential })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.authenticated) {
+      _isAuthenticated = true;
+      updateAuthUI(data.email);
+      closeDetail();
+      // Re-fetch status to get unfiltered data, then open the detail
+      fetch('/api/status')
+        .then(function(r) { return r.json(); })
+        .then(function(statusData) {
+          _lastData = statusData;
+          if (_pendingGroupKey && statusData.services[_pendingGroupKey]) {
+            openGroupDetail(_pendingGroupKey);
+            _pendingGroupKey = null;
+          }
+        });
+    } else {
+      alert('Login failed: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(function(err) {
+    alert('Login failed: ' + err.message);
+  });
+}
+
+function logout() {
+  fetch('/api/auth/logout', { method: 'POST' })
+    .then(function() {
+      _isAuthenticated = false;
+      updateAuthUI(null);
+      if (_openGroupKey) closeDetail();
+      if (_logServiceId) closeLogs();
+      // Re-fetch to get filtered data
+      fetch('/api/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { _lastData = data; });
+    });
+}
+
+function updateAuthUI(email) {
+  var el = document.getElementById('auth-status');
+  if (email) {
+    el.style.display = 'flex';
+    document.getElementById('auth-email').textContent = email;
+  } else {
+    el.style.display = 'none';
+    document.getElementById('auth-email').textContent = '';
+  }
+}
+
+// Check auth status on load
+if (_authEnabled) {
+  fetch('/api/auth/status')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      _isAuthenticated = data.authenticated;
+      if (data.authenticated) updateAuthUI(data.email);
+    })
+    .catch(function() {});
 }
 
 function closeDetail() {
@@ -683,11 +857,13 @@ function renderDetailModal(groupKey, group) {
     html += '<span class="service-name">' + escapeHtml(svc.name) + '</span>';
     html += '<div class="service-meta">';
     if (svc.schedule) html += '<span class="service-schedule">' + escapeHtml(svc.schedule) + '</span>';
-    if (svc.pid) html += '<span class="service-pid">PID ' + svc.pid + '</span>';
-    if (svc.has_log) html += '<button class="log-btn" onclick="openLogs(\'' + escapeAttr(svc.id) + '\', \'' + escapeAttr(svc.name) + '\'); event.stopPropagation();">logs</button>';
+    if (!_authEnabled || _isAuthenticated) {
+      if (svc.pid) html += '<span class="service-pid">PID ' + svc.pid + '</span>';
+      if (svc.has_log) html += '<button class="log-btn" onclick="openLogs(\'' + escapeAttr(svc.id) + '\', \'' + escapeAttr(svc.name) + '\'); event.stopPropagation();">logs</button>';
+    }
     html += '<span class="status-badge ' + bc + '"><span class="status-dot"></span> ' + sl + '</span>';
     html += '</div></div>';
-    if (svc.recent_log && svc.recent_log.length > 0) {
+    if ((!_authEnabled || _isAuthenticated) && svc.recent_log && svc.recent_log.length > 0) {
       html += '<div class="log-snippet"><pre>' + escapeHtml(svc.recent_log.join('\n')) + '</pre></div>';
     }
   });
@@ -913,6 +1089,14 @@ document.addEventListener('keydown', function(e) {
             updateRow('cc-weekly-row', null, 604800);
             updateRow('cc-session-row', null, 18000);
             updateCcTimestamp(null);
+          }
+        }
+
+        // Update auth state from API response
+        if (data.auth_enabled !== undefined) {
+          _authEnabled = data.auth_enabled;
+          if (data.authenticated !== undefined) {
+            _isAuthenticated = data.authenticated;
           }
         }
 

@@ -2,6 +2,7 @@ require 'socket'
 require 'json'
 require 'uri'
 require_relative 'lib/config'
+require_relative 'lib/auth'
 require_relative 'lib/service_checker'
 require_relative 'lib/system_stats'
 require_relative 'lib/log_reader'
@@ -68,18 +69,80 @@ loop do
       next unless request_line
       _method, path, _version = request_line.split(' ')
 
-      # Read request headers, capture Content-Length
+      # Read request headers, capture Content-Length and Cookie
       content_length = 0
+      cookie_header = nil
       while (header = conn.gets) && header != "\r\n"
         if header =~ /^Content-Length:\s*(\d+)/i
           content_length = $1.to_i
+        elsif header =~ /^Cookie:\s*(.+)/i
+          cookie_header = $1.strip
         end
       end
 
-      # Read and discard POST body if present
-      conn.read(content_length) if content_length > 0
+      # Read POST body if present
+      post_body = content_length > 0 ? conn.read(content_length) : nil
 
-      if path&.start_with?('/api/logs')
+      # Determine auth state for this request
+      authed_email = Auth.authenticated_email(cookie_header)
+      is_authenticated = authed_email && Auth.allowed?(authed_email)
+      auth_enabled = Auth.auth_configured?
+
+      if _method == 'POST' && path == '/api/auth'
+        begin
+          req_data = JSON.parse(post_body || '{}')
+          id_token = req_data['id_token']
+          client_id = Config.auth[:google_client_id]
+          result = Auth.verify_google_token(id_token, client_id)
+          if result && Auth.allowed?(result[:email])
+            session_token = Auth.create_session(result[:email])
+            body = JSON.generate({ authenticated: true, email: result[:email] })
+            conn.print "HTTP/1.1 200 OK\r\n" \
+                       "Content-Type: application/json; charset=utf-8\r\n" \
+                       "Content-Length: #{body.bytesize}\r\n" \
+                       "Set-Cookie: status_session=#{session_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400\r\n" \
+                       "Cache-Control: no-cache\r\n" \
+                       "Connection: close\r\n\r\n#{body}"
+          else
+            body = JSON.generate({ authenticated: false, error: 'Unauthorized' })
+            conn.print "HTTP/1.1 401 Unauthorized\r\n" \
+                       "Content-Type: application/json; charset=utf-8\r\n" \
+                       "Content-Length: #{body.bytesize}\r\n" \
+                       "Connection: close\r\n\r\n#{body}"
+          end
+        rescue => e
+          body = JSON.generate({ error: e.message })
+          conn.print "HTTP/1.1 400 Bad Request\r\n" \
+                     "Content-Type: application/json\r\n" \
+                     "Content-Length: #{body.bytesize}\r\n" \
+                     "Connection: close\r\n\r\n#{body}"
+        end
+      elsif path == '/api/auth/status'
+        body = JSON.generate({ authenticated: is_authenticated, email: is_authenticated ? authed_email : nil })
+        conn.print "HTTP/1.1 200 OK\r\n" \
+                   "Content-Type: application/json; charset=utf-8\r\n" \
+                   "Content-Length: #{body.bytesize}\r\n" \
+                   "Cache-Control: no-cache\r\n" \
+                   "Connection: close\r\n\r\n#{body}"
+      elsif _method == 'POST' && path == '/api/auth/logout'
+        token = Auth.parse_session_cookie(cookie_header)
+        Auth.destroy_session(token) if token
+        body = JSON.generate({ authenticated: false })
+        conn.print "HTTP/1.1 200 OK\r\n" \
+                   "Content-Type: application/json; charset=utf-8\r\n" \
+                   "Content-Length: #{body.bytesize}\r\n" \
+                   "Set-Cookie: status_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\n" \
+                   "Cache-Control: no-cache\r\n" \
+                   "Connection: close\r\n\r\n#{body}"
+      elsif path&.start_with?('/api/logs')
+        if auth_enabled && !is_authenticated
+          body = JSON.generate({ error: 'Authentication required' })
+          conn.print "HTTP/1.1 401 Unauthorized\r\n" \
+                     "Content-Type: application/json\r\n" \
+                     "Content-Length: #{body.bytesize}\r\n" \
+                     "Connection: close\r\n\r\n#{body}"
+          next
+        end
         params = URI.decode_www_form(URI(path).query || '').to_h
         service_id = params['service']
         lines = (params['lines'] || 100).to_i.clamp(1, 1000)
@@ -102,7 +165,22 @@ loop do
         end
       elsif path == '/api/status'
         data = StatusPage.collect_all
-        body = JSON.generate(data)
+        response_data = data.dup
+        if auth_enabled && !is_authenticated
+          # Strip sensitive fields from service data for unauthenticated users
+          filtered_services = {}
+          data[:services].each do |group_key, group|
+            filtered_services[group_key] = {
+              label: group[:label],
+              services: group[:services].map { |svc|
+                svc.reject { |k, _| [:pid, :recent_log, :has_log, :log_modified].include?(k) }
+              }
+            }
+          end
+          response_data = data.merge(services: filtered_services)
+        end
+        response_data = response_data.merge(authenticated: is_authenticated, auth_enabled: auth_enabled)
+        body = JSON.generate(response_data)
         conn.print "HTTP/1.1 200 OK\r\n" \
                    "Content-Type: application/json; charset=utf-8\r\n" \
                    "Content-Length: #{body.bytesize}\r\n" \
@@ -165,7 +243,11 @@ loop do
                    "Connection: close\r\n\r\n#{MANIFEST_JSON}"
       else
         data = StatusPage.collect_all
-        body = HtmlRenderer.render(data)
+        render_data = data.merge(
+          auth_enabled: auth_enabled,
+          google_client_id: auth_enabled ? Config.auth[:google_client_id] : nil
+        )
+        body = HtmlRenderer.render(render_data)
         conn.print "HTTP/1.1 200 OK\r\n" \
                    "Content-Type: text/html; charset=utf-8\r\n" \
                    "Content-Length: #{body.bytesize}\r\n" \
