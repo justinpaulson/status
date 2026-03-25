@@ -709,11 +709,10 @@ function openGroupDetail(groupKey) {
 }
 
 function showAuthPrompt(groupKey) {
-  var group = _lastData.services[groupKey];
-  document.getElementById('detail-modal-title').textContent = group.label;
+  document.getElementById('detail-modal-title').textContent = 'Login Required';
   var sumEl = document.getElementById('detail-modal-summary');
-  sumEl.textContent = 'Login Required';
-  sumEl.className = 'group-summary summary-warn';
+  sumEl.textContent = '';
+  sumEl.className = 'group-summary';
 
   var html = '<div class="auth-prompt">';
   html += '<p>Sign in with Google to view service details, PIDs, and logs.</p>';
@@ -1128,7 +1127,7 @@ document.addEventListener('keydown', function(e) {
         });
 
         // If detail modal is open, re-render it live
-        if (_openGroupKey && data.services[_openGroupKey]) {
+        if (_openGroupKey && data.services[_openGroupKey] && (!_authEnabled || _isAuthenticated)) {
           renderDetailModal(_openGroupKey, data.services[_openGroupKey]);
         }
 
