@@ -285,7 +285,7 @@
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 100;
+    z-index: 102;
   }
   .log-overlay.open { display: block; }
   .log-panel {
@@ -296,7 +296,7 @@
     width: min(700px, 90vw);
     background: #0d1117;
     border-left: 1px solid #30363d;
-    z-index: 101;
+    z-index: 103;
     display: flex;
     flex-direction: column;
     transform: translateX(100%);
@@ -374,6 +374,63 @@
     color: #484f58;
   }
 
+  /* Service summary cards */
+  .stat-card.service-summary-card { cursor: pointer; transition: border-color 0.2s; }
+  .stat-card.service-summary-card:hover { border-color: #58a6ff; }
+  .stat-card .summary-counts { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; }
+  .stat-card .count-ok { color: #3fb950; }
+  .stat-card .count-warn { color: #d29922; }
+  .stat-card .count-err { color: #f85149; }
+
+  /* Detail modal */
+  .detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100;
+  }
+  .detail-overlay.open { display: block; }
+  .detail-modal {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.95);
+    width: min(700px, 90vw);
+    max-height: 80vh;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    z-index: 101;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 0;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .detail-modal.open {
+    display: flex;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  .detail-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #21262d;
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .detail-modal-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+  .detail-modal-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+
   @media (max-width: 600px) {
     body { padding: 12px; }
     .system-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -395,63 +452,6 @@
 </header>
 
 <div class="connection-lost" id="connection-lost">Connection to status server lost</div>
-
-<% cpu_used = (data[:system][:cpu][:user] + data[:system][:cpu][:sys]).round(1) %>
-<% mem_pct = data[:system][:memory][:total] > 0 ? ((data[:system][:memory][:used].to_f / data[:system][:memory][:total]) * 100).round(1) : 0 %>
-<% disk_pct = data[:system][:disk][:capacity]&.to_s&.gsub('%','')&.to_f || 0 %>
-
-<div class="system-stats" id="system-stats">
-  <div class="stat-card">
-    <div class="label">CPU</div>
-    <div class="value"><%= cpu_used %>%</div>
-    <div class="sub"><%= data[:system][:cpu][:user] %>% user / <%= data[:system][:cpu][:sys] %>% sys</div>
-    <div class="progress-bar">
-      <div class="fill <%= cpu_used > 90 ? 'fill-red' : cpu_used > 70 ? 'fill-yellow' : 'fill-green' %>"
-           style="width: <%= cpu_used %>%"></div>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Memory</div>
-    <div class="value"><%= mem_pct %>%</div>
-    <div class="sub"><%= (data[:system][:memory][:used] / 1073741824.0).round(1) %> GB / <%= (data[:system][:memory][:total] / 1073741824.0).round(1) %> GB</div>
-    <div class="progress-bar">
-      <div class="fill <%= mem_pct > 90 ? 'fill-red' : mem_pct > 70 ? 'fill-yellow' : 'fill-green' %>"
-           style="width: <%= mem_pct %>%"></div>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Disk</div>
-    <div class="value"><%= data[:system][:disk][:capacity] %></div>
-    <div class="sub"><%= data[:system][:disk][:used] %> / <%= data[:system][:disk][:size] %></div>
-    <div class="progress-bar">
-      <div class="fill <%= disk_pct > 90 ? 'fill-red' : disk_pct > 70 ? 'fill-yellow' : 'fill-green' %>"
-           style="width: <%= disk_pct %>%"></div>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Uptime</div>
-    <div class="value" style="font-size:16px"><%= data[:system][:uptime] %></div>
-    <div class="sub">Load: <%= data[:system][:load][:one] %> / <%= data[:system][:load][:five] %> / <%= data[:system][:load][:fifteen] %></div>
-  </div>
-  <% if data[:config][:features][:docker] %>
-  <div class="stat-card" id="docker-card">
-    <div class="label">Docker</div>
-    <% if data[:system][:docker][:running] %>
-      <div class="value" style="font-size:16px; color: #3fb950;">Running</div>
-      <div class="sub">v<%= data[:system][:docker][:version] %></div>
-    <% else %>
-      <div class="value" style="font-size:16px; color: #f85149;">Stopped</div>
-      <div class="sub">
-        <% if data[:system][:docker][:docker_app] %>
-          <button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start <%= data[:system][:docker][:docker_app] %></button>
-        <% else %>
-          Docker not installed
-        <% end %>
-      </div>
-    <% end %>
-  </div>
-  <% end %>
-</div>
 
 <% if data[:claude_code] %>
 <%
@@ -520,68 +520,96 @@
 </div>
 <% end %>
 
-<% data[:services].each do |key, group| %>
-<%
-  services = group[:services]
-  ok_count = services.count { |s| s[:status] == "ok" }
-  total = services.size
-  has_errors = services.any? { |s| s[:status] == "error" }
-  has_warnings = services.any? { |s| s[:status] == "warning" }
-  summary_class = has_errors ? "summary-err" : has_warnings ? "summary-warn" : "summary-ok"
-%>
-<div class="group" data-group="<%= key %>">
-  <div class="group-header">
-    <h2><%= group[:label] %></h2>
-    <span class="group-summary <%= summary_class %>"><%= ok_count %>/<%= total %> operational</span>
-  </div>
-  <% services.each do |svc| %>
-  <%
-    badge_class = case svc[:status]
-    when "ok" then "badge-ok"
-    when "warning" then "badge-warning"
-    when "error" then "badge-error"
-    else "badge-idle"
-    end
-    if svc[:status] == "ok" && svc[:state] == "idle"
-      badge_class = "badge-idle"
-    end
-    state_label = case svc[:state]
-    when "running" then "Running"
-    when "idle" then "Idle"
-    when "stopped" then "Stopped"
-    when "unloaded" then "Unloaded"
-    else "Unknown"
-    end
-    if svc[:listener_missing]
-      state_label = "No Listener"
-    end
-  %>
-  <div class="service-row" data-service="<%= svc[:id] %>" data-has-log="<%= svc[:has_log] ? 'true' : 'false' %>">
-    <span class="service-name"><%= svc[:name] %></span>
-    <div class="service-meta">
-      <% if svc[:schedule] %>
-        <span class="service-schedule"><%= svc[:schedule] %></span>
-      <% end %>
-      <% if svc[:pid] %>
-        <span class="service-pid">PID <%= svc[:pid] %></span>
-      <% end %>
-      <% if svc[:has_log] %>
-        <button class="log-btn" onclick="openLogs('<%= svc[:id] %>', '<%= svc[:name] %>'); event.stopPropagation();">logs</button>
-      <% end %>
-      <span class="status-badge <%= badge_class %>">
-        <span class="status-dot"></span>
-        <%= state_label %>
-      </span>
+<% cpu_used = (data[:system][:cpu][:user] + data[:system][:cpu][:sys]).round(1) %>
+<% mem_pct = data[:system][:memory][:total] > 0 ? ((data[:system][:memory][:used].to_f / data[:system][:memory][:total]) * 100).round(1) : 0 %>
+<% disk_pct = data[:system][:disk][:capacity]&.to_s&.gsub('%','')&.to_f || 0 %>
+
+<div class="system-stats" id="system-stats">
+  <div class="stat-card">
+    <div class="label">CPU</div>
+    <div class="value"><%= cpu_used %>%</div>
+    <div class="sub"><%= data[:system][:cpu][:user] %>% user / <%= data[:system][:cpu][:sys] %>% sys</div>
+    <div class="progress-bar">
+      <div class="fill <%= cpu_used > 90 ? 'fill-red' : cpu_used > 70 ? 'fill-yellow' : 'fill-green' %>"
+           style="width: <%= cpu_used %>%"></div>
     </div>
   </div>
-  <% if svc[:recent_log] && svc[:recent_log].any? %>
-  <div class="log-snippet" data-log-for="<%= svc[:id] %>">
-    <pre><%= svc[:recent_log].join("\n") %></pre>
+  <div class="stat-card">
+    <div class="label">Memory</div>
+    <div class="value"><%= mem_pct %>%</div>
+    <div class="sub"><%= (data[:system][:memory][:used] / 1073741824.0).round(1) %> GB / <%= (data[:system][:memory][:total] / 1073741824.0).round(1) %> GB</div>
+    <div class="progress-bar">
+      <div class="fill <%= mem_pct > 90 ? 'fill-red' : mem_pct > 70 ? 'fill-yellow' : 'fill-green' %>"
+           style="width: <%= mem_pct %>%"></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Disk</div>
+    <div class="value"><%= data[:system][:disk][:capacity] %></div>
+    <div class="sub"><%= data[:system][:disk][:used] %> / <%= data[:system][:disk][:size] %></div>
+    <div class="progress-bar">
+      <div class="fill <%= disk_pct > 90 ? 'fill-red' : disk_pct > 70 ? 'fill-yellow' : 'fill-green' %>"
+           style="width: <%= disk_pct %>%"></div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Uptime</div>
+    <div class="value" style="font-size:16px"><%= data[:system][:uptime] %></div>
+    <div class="sub">Load: <%= data[:system][:load][:one] %> / <%= data[:system][:load][:five] %> / <%= data[:system][:load][:fifteen] %></div>
+  </div>
+  <% if data[:config][:features][:docker] %>
+  <div class="stat-card" id="docker-card">
+    <div class="label">Docker</div>
+    <% if data[:system][:docker][:running] %>
+      <div class="value" style="font-size:16px; color: #3fb950;">Running</div>
+      <div class="sub">v<%= data[:system][:docker][:version] %></div>
+    <% else %>
+      <div class="value" style="font-size:16px; color: #f85149;">Stopped</div>
+      <div class="sub">
+        <% if data[:system][:docker][:docker_app] %>
+          <button class="log-btn" onclick="startDocker()" id="start-docker-btn">Start <%= data[:system][:docker][:docker_app] %></button>
+        <% else %>
+          Docker not installed
+        <% end %>
+      </div>
+    <% end %>
   </div>
   <% end %>
+  <% data[:services].each do |key, group| %>
+  <%
+    services = group[:services]
+    ok_count = services.count { |s| s[:status] == "ok" }
+    err_count = services.count { |s| s[:status] == "error" }
+    warn_count = services.count { |s| s[:status] == "warning" }
+    running_count = services.count { |s| s[:state] == "running" }
+    total = services.size
+    border_color = err_count > 0 ? '#f8514940' : warn_count > 0 ? '#d2992240' : '#21262d'
+  %>
+  <div class="stat-card service-summary-card"
+       data-group="<%= key %>"
+       onclick="openGroupDetail('<%= key %>')"
+       style="border-color: <%= border_color %>">
+    <div class="label"><%= group[:label] %></div>
+    <div class="value"><%= ok_count %>/<%= total %></div>
+    <div class="sub"><%= running_count %> running</div>
+    <div class="summary-counts">
+      <% if err_count > 0 %><span class="count-err"><%= err_count %> failed</span><% end %>
+      <% if warn_count > 0 %><span class="count-warn"><%= warn_count %> warning</span><% end %>
+      <% if err_count == 0 && warn_count == 0 %><span class="count-ok">all healthy</span><% end %>
+    </div>
+  </div>
   <% end %>
 </div>
-<% end %>
+
+<div class="detail-overlay" id="detail-overlay" onclick="closeDetail()"></div>
+<div class="detail-modal" id="detail-modal">
+  <div class="detail-modal-header">
+    <h3 id="detail-modal-title">Services</h3>
+    <span class="group-summary" id="detail-modal-summary"></span>
+    <button class="log-panel-close" onclick="closeDetail()">&times;</button>
+  </div>
+  <div class="detail-modal-body" id="detail-modal-body"></div>
+</div>
 
 <div class="log-overlay" id="log-overlay" onclick="closeLogs()"></div>
 <div class="log-panel" id="log-panel">
@@ -607,6 +635,74 @@
 <script>
 var _logInterval = null;
 var _logServiceId = null;
+var _lastData = null;
+var _openGroupKey = null;
+
+function openGroupDetail(groupKey) {
+  _openGroupKey = groupKey;
+  if (!_lastData || !_lastData.services || !_lastData.services[groupKey]) return;
+  renderDetailModal(groupKey, _lastData.services[groupKey]);
+  document.getElementById('detail-overlay').classList.add('open');
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function closeDetail() {
+  _openGroupKey = null;
+  document.getElementById('detail-overlay').classList.remove('open');
+  document.getElementById('detail-modal').classList.remove('open');
+}
+
+function renderDetailModal(groupKey, group) {
+  var services = group.services;
+  var okCount = services.filter(function(s) { return s.status === 'ok'; }).length;
+  var hasErr = services.some(function(s) { return s.status === 'error'; });
+  var hasWarn = services.some(function(s) { return s.status === 'warning'; });
+  var sumClass = hasErr ? 'summary-err' : hasWarn ? 'summary-warn' : 'summary-ok';
+
+  document.getElementById('detail-modal-title').textContent = group.label;
+  var sumEl = document.getElementById('detail-modal-summary');
+  sumEl.textContent = okCount + '/' + services.length + ' operational';
+  sumEl.className = 'group-summary ' + sumClass;
+
+  var html = '';
+  services.forEach(function(svc) {
+    var bc = 'badge-idle';
+    if (svc.status === 'ok' && svc.state !== 'idle') bc = 'badge-ok';
+    else if (svc.status === 'ok' && svc.state === 'idle') bc = 'badge-idle';
+    else if (svc.status === 'warning') bc = 'badge-warning';
+    else if (svc.status === 'error') bc = 'badge-error';
+
+    var sl = 'Unknown';
+    if (svc.listener_missing) sl = 'No Listener';
+    else if (svc.state === 'running') sl = 'Running';
+    else if (svc.state === 'idle') sl = 'Idle';
+    else if (svc.state === 'stopped') sl = 'Stopped';
+    else if (svc.state === 'unloaded') sl = 'Unloaded';
+
+    html += '<div class="service-row">';
+    html += '<span class="service-name">' + escapeHtml(svc.name) + '</span>';
+    html += '<div class="service-meta">';
+    if (svc.schedule) html += '<span class="service-schedule">' + escapeHtml(svc.schedule) + '</span>';
+    if (svc.pid) html += '<span class="service-pid">PID ' + svc.pid + '</span>';
+    if (svc.has_log) html += '<button class="log-btn" onclick="openLogs(\'' + escapeAttr(svc.id) + '\', \'' + escapeAttr(svc.name) + '\'); event.stopPropagation();">logs</button>';
+    html += '<span class="status-badge ' + bc + '"><span class="status-dot"></span> ' + sl + '</span>';
+    html += '</div></div>';
+    if (svc.recent_log && svc.recent_log.length > 0) {
+      html += '<div class="log-snippet"><pre>' + escapeHtml(svc.recent_log.join('\n')) + '</pre></div>';
+    }
+  });
+  document.getElementById('detail-modal-body').innerHTML = html;
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
 
 function openLogs(serviceId, serviceName) {
   _logServiceId = serviceId;
@@ -655,7 +751,10 @@ function startDocker() {
 }
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeLogs();
+  if (e.key === 'Escape') {
+    if (_logServiceId) closeLogs();
+    else if (_openGroupKey) closeDetail();
+  }
 });
 
 (function() {
@@ -668,31 +767,6 @@ document.addEventListener('keydown', function(e) {
     if (secs < 2) el.textContent = 'Just now';
     else if (secs < 60) el.textContent = secs + 's ago';
     else el.textContent = Math.round(secs / 60) + 'm ago';
-  }
-
-  function statusBadgeClass(status, state) {
-    if (status === 'ok' && state === 'idle') return 'badge-idle';
-    if (status === 'ok') return 'badge-ok';
-    if (status === 'warning') return 'badge-warning';
-    if (status === 'error') return 'badge-error';
-    return 'badge-idle';
-  }
-
-  function stateLabel(svc) {
-    if (svc.listener_missing) return 'No Listener';
-    if (svc.state === 'running') return 'Running';
-    if (svc.state === 'idle') return 'Idle';
-    if (svc.state === 'stopped') return 'Stopped';
-    if (svc.state === 'unloaded') return 'Unloaded';
-    return 'Unknown';
-  }
-
-  function summaryClass(services) {
-    var hasErr = services.some(function(s) { return s.status === 'error'; });
-    var hasWarn = services.some(function(s) { return s.status === 'warning'; });
-    if (hasErr) return 'summary-err';
-    if (hasWarn) return 'summary-warn';
-    return 'summary-ok';
   }
 
   function fillClass(pct) {
@@ -842,57 +916,37 @@ document.addEventListener('keydown', function(e) {
           }
         }
 
-        // Update service groups
+        // Store last data for detail modal
+        _lastData = data;
+
+        // Update service summary cards
         Object.keys(data.services).forEach(function(key) {
           var group = data.services[key];
-          var groupEl = document.querySelector('[data-group="' + key + '"]');
-          if (!groupEl) return;
+          var card = document.querySelector('.service-summary-card[data-group="' + key + '"]');
+          if (!card) return;
 
           var services = group.services;
           var okCount = services.filter(function(s) { return s.status === 'ok'; }).length;
-          var summaryEl = groupEl.querySelector('.group-summary');
-          summaryEl.textContent = okCount + '/' + services.length + ' operational';
-          summaryEl.className = 'group-summary ' + summaryClass(services);
+          var errCount = services.filter(function(s) { return s.status === 'error'; }).length;
+          var warnCount = services.filter(function(s) { return s.status === 'warning'; }).length;
+          var runningCount = services.filter(function(s) { return s.state === 'running'; }).length;
+          var total = services.length;
 
-          services.forEach(function(svc) {
-            var row = groupEl.querySelector('[data-service="' + svc.id + '"]');
-            if (!row) return;
+          card.querySelector('.value').textContent = okCount + '/' + total;
+          card.querySelector('.sub').textContent = runningCount + ' running';
+          card.style.borderColor = errCount > 0 ? '#f8514940' : warnCount > 0 ? '#d2992240' : '#21262d';
 
-            var badge = row.querySelector('.status-badge');
-            badge.className = 'status-badge ' + statusBadgeClass(svc.status, svc.state);
-            badge.innerHTML = '<span class="status-dot"></span> ' + stateLabel(svc);
-
-            var pidEl = row.querySelector('.service-pid');
-            if (pidEl) {
-              pidEl.textContent = svc.pid ? 'PID ' + svc.pid : '';
-            }
-
-            // Ensure log button exists for services with logs
-            if (svc.has_log && !row.querySelector('.log-btn')) {
-              var btn = document.createElement('button');
-              btn.className = 'log-btn';
-              btn.textContent = 'logs';
-              btn.onclick = function(e) { openLogs(svc.id, svc.name); e.stopPropagation(); };
-              row.querySelector('.service-meta').insertBefore(btn, badge);
-            }
-
-            // Update log snippet
-            var logEl = groupEl.querySelector('[data-log-for="' + svc.id + '"]');
-            if (svc.recent_log && svc.recent_log.length > 0) {
-              if (!logEl) {
-                logEl = document.createElement('div');
-                logEl.className = 'log-snippet';
-                logEl.setAttribute('data-log-for', svc.id);
-                logEl.innerHTML = '<pre></pre>';
-                row.after(logEl);
-              }
-              logEl.querySelector('pre').textContent = svc.recent_log.join('\n');
-              logEl.style.display = '';
-            } else if (logEl) {
-              logEl.style.display = 'none';
-            }
-          });
+          var countsHtml = '';
+          if (errCount > 0) countsHtml += '<span class="count-err">' + errCount + ' failed</span>';
+          if (warnCount > 0) countsHtml += '<span class="count-warn">' + warnCount + ' warning</span>';
+          if (errCount === 0 && warnCount === 0) countsHtml += '<span class="count-ok">all healthy</span>';
+          card.querySelector('.summary-counts').innerHTML = countsHtml;
         });
+
+        // If detail modal is open, re-render it live
+        if (_openGroupKey && data.services[_openGroupKey]) {
+          renderDetailModal(_openGroupKey, data.services[_openGroupKey]);
+        }
 
         // Update favicon based on overall status
         var allOk = Object.keys(data.services).every(function(key) {
@@ -918,6 +972,7 @@ document.addEventListener('keydown', function(e) {
       });
   }
 
+  refresh();
   setInterval(refresh, 15000);
   setInterval(updateTimestamp, 1000);
   setInterval(function() {
