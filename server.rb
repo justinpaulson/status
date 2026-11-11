@@ -13,6 +13,14 @@ if Config.feature?(:claude_code)
   require_relative 'lib/claude_stats'
 end
 
+if Config.feature?(:openai_usage)
+  require_relative 'lib/openai_stats'
+end
+
+if Config.feature?(:openai_subscription)
+  require_relative 'lib/openai_subscription_stats'
+end
+
 PORT = ENV.fetch('PORT', Config.dashboard[:port]).to_i
 
 APPLE_TOUCH_ICON = File.binread(File.join(__dir__, 'public', 'apple-touch-icon.png')).freeze
@@ -46,6 +54,12 @@ module StatusPage
     }
     if Config.feature?(:claude_code)
       @cache[:claude_code] = ClaudeStats.collect
+    end
+    if Config.feature?(:openai_usage)
+      @cache[:openai_usage] = OpenAIStats.collect
+    end
+    if Config.feature?(:openai_subscription)
+      @cache[:openai_subscription] = OpenAISubscriptionStats.collect
     end
     @cache_at = Time.now
     @cache

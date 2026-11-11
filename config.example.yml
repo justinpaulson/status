@@ -11,6 +11,24 @@ dashboard:
 features:
   docker: false                   # Show Docker status card (supports OrbStack and Docker Desktop)
   claude_code: false              # Show Claude Code usage section
+  openai_usage: false             # Show OpenAI API usage section
+  openai_subscription: false      # Show local OpenAI/Codex subscription activity section
+
+# OpenAI API usage (optional) — requires an OpenAI admin API key.
+# Store the key outside this file, either in the environment variable below or
+# in the macOS Keychain service you configure here.
+# openai_usage:
+#   monthly_budget_usd: 20
+#   admin_key_env: "OPENAI_ADMIN_KEY"
+#   keychain_service: "OpenAI Admin API Key"
+#   keychain_account: "you@example.com"
+
+# OpenAI subscription activity (optional). There is no documented API for
+# remaining ChatGPT subscription quota, so this reads local Codex thread totals
+# and pairs them with the configured plan's public limit summary.
+# openai_subscription:
+#   plan: "plus"                  # free, go, plus, pro_100, pro_200, business, enterprise
+#   codex_state_db: "~/.codex/state_5.sqlite"
 
 # Authentication (optional) — protect service details and logs behind Google login
 # auth:

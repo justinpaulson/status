@@ -39,6 +39,30 @@ module Config
     @data[:auth] || {}
   end
 
+  def self.openai_usage
+    ensure_loaded
+    cfg = @data[:openai_usage] || {}
+    budget = cfg[:monthly_budget_usd]
+    budget = budget.to_f if budget
+    budget = nil unless budget&.positive?
+    {
+      monthly_budget_usd: budget,
+      admin_key_env: cfg[:admin_key_env] || 'OPENAI_ADMIN_KEY',
+      keychain_service: cfg[:keychain_service],
+      keychain_account: cfg[:keychain_account]
+    }
+  end
+
+  def self.openai_subscription
+    ensure_loaded
+    cfg = @data[:openai_subscription] || {}
+    plan = cfg[:plan]&.to_s&.downcase&.tr('-', '_')
+    {
+      plan: plan&.to_sym,
+      codex_state_db: cfg[:codex_state_db] || '~/.codex/state_5.sqlite'
+    }
+  end
+
   def self.feature?(name)
     ensure_loaded
     features[name.to_sym] == true

@@ -3,4 +3,5 @@ log/
 .DS_Store
 config.yml
 .claude_stats_cache.json
+.openai_stats_cache.json
 tmp/
