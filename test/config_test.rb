@@ -40,12 +40,61 @@ class ConfigTest < Minitest::Test
 
   def test_feature_flags
     path = write_config({
-      'features' => { 'docker' => true, 'claude_code' => false }
+      'features' => { 'docker' => true, 'claude_code' => false, 'openai_usage' => true }
     })
     Config.load(path)
     assert Config.feature?(:docker)
     refute Config.feature?(:claude_code)
+    assert Config.feature?(:openai_usage)
     refute Config.feature?(:nonexistent)
+  end
+
+  def test_openai_usage_defaults
+    path = write_config({})
+    Config.load(path)
+    cfg = Config.openai_usage
+    assert_nil cfg[:monthly_budget_usd]
+    assert_equal 'OPENAI_ADMIN_KEY', cfg[:admin_key_env]
+    assert_nil cfg[:keychain_service]
+    assert_nil cfg[:keychain_account]
+  end
+
+  def test_openai_usage_custom_values
+    path = write_config({
+      'openai_usage' => {
+        'monthly_budget_usd' => '25.50',
+        'admin_key_env' => 'MY_OPENAI_ADMIN_KEY',
+        'keychain_service' => 'OpenAI Admin API Key',
+        'keychain_account' => 'user@example.com'
+      }
+    })
+    Config.load(path)
+    cfg = Config.openai_usage
+    assert_equal 25.50, cfg[:monthly_budget_usd]
+    assert_equal 'MY_OPENAI_ADMIN_KEY', cfg[:admin_key_env]
+    assert_equal 'OpenAI Admin API Key', cfg[:keychain_service]
+    assert_equal 'user@example.com', cfg[:keychain_account]
+  end
+
+  def test_openai_subscription_defaults
+    path = write_config({})
+    Config.load(path)
+    cfg = Config.openai_subscription
+    assert_nil cfg[:plan]
+    assert_equal '~/.codex/state_5.sqlite', cfg[:codex_state_db]
+  end
+
+  def test_openai_subscription_custom_values
+    path = write_config({
+      'openai_subscription' => {
+        'plan' => 'pro-100',
+        'codex_state_db' => '~/custom/state.sqlite'
+      }
+    })
+    Config.load(path)
+    cfg = Config.openai_subscription
+    assert_equal :pro_100, cfg[:plan]
+    assert_equal '~/custom/state.sqlite', cfg[:codex_state_db]
   end
 
   def test_feature_string_name

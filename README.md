@@ -1,6 +1,6 @@
 # Status Dashboard
 
-A lightweight, zero-dependency Ruby status dashboard for macOS. Monitors system resources, launchd services, and optional integrations like Docker/OrbStack and Claude Code API usage.
+A lightweight, zero-dependency Ruby status dashboard for macOS. Monitors system resources, launchd services, and optional integrations like Docker/OrbStack, Claude Code API usage, OpenAI API usage, and local OpenAI subscription activity.
 
 ## Features
 
@@ -11,6 +11,8 @@ A lightweight, zero-dependency Ruby status dashboard for macOS. Monitors system 
 - Dynamic favicon reflecting overall system health (green/red)
 - Optional Docker/OrbStack status monitoring
 - Optional Claude Code API usage tracking
+- Optional OpenAI API usage and cost tracking
+- Optional OpenAI subscription activity tracking from local Codex state
 - PWA support (installable on iOS/macOS)
 - Auto-refresh every 5 seconds
 - Dark theme UI
@@ -55,6 +57,8 @@ dashboard:
 features:
   docker: false       # Show Docker/OrbStack status card
   claude_code: false  # Show Claude Code usage section
+  openai_usage: false # Show OpenAI API usage section
+  openai_subscription: false # Show local OpenAI/Codex subscription activity
 ```
 
 ### Services
@@ -164,6 +168,48 @@ Set `features.docker: true` in your config. The dashboard will show a Docker sta
 ### Claude Code Usage
 
 Set `features.claude_code: true` in your config. This reads your Claude Code OAuth token from the macOS Keychain (stored automatically by the Claude Code desktop app under "Claude Code-credentials") and displays weekly and per-session usage bars with pace indicators. If the token isn't available, the section gracefully shows "Disconnected."
+
+### OpenAI API Usage
+
+Set `features.openai_usage: true` in your config. This uses OpenAI's organization usage and cost APIs, which require an OpenAI admin API key. The dashboard displays current-month API spend, today's spend, request count, and token totals. If `monthly_budget_usd` is configured, the monthly and daily rows show budget utilization and pace indicators.
+
+```yaml
+features:
+  openai_usage: true
+
+openai_usage:
+  monthly_budget_usd: 20
+  admin_key_env: "OPENAI_ADMIN_KEY"
+```
+
+You can also store the admin key in the macOS Keychain instead of the launchd environment:
+
+```sh
+security add-generic-password -s "OpenAI Admin API Key" -a "$USER" -w "sk-admin-..." -U
+```
+
+```yaml
+openai_usage:
+  keychain_service: "OpenAI Admin API Key"
+  keychain_account: "your-email@example.com"
+```
+
+This tracks OpenAI API organization usage. ChatGPT subscription message caps are not exposed through the public OpenAI API, so those limits are not included.
+
+### OpenAI Subscription Activity
+
+Set `features.openai_subscription: true` to show local Codex activity from `~/.codex/state_5.sqlite` alongside the configured plan's public limit summary.
+
+```yaml
+features:
+  openai_subscription: true
+
+openai_subscription:
+  plan: "plus"
+  codex_state_db: "~/.codex/state_5.sqlite"
+```
+
+This is intentionally labeled as local activity, not authoritative remaining quota. OpenAI documents ChatGPT plan and model limits in the product docs, but does not provide a supported API for the current remaining ChatGPT subscription allowance.
 
 ## Running Tests
 

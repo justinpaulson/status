@@ -1,4 +1,5 @@
 require 'erb'
+require 'time'
 
 module HtmlRenderer
   TEMPLATE_PATH = File.join(__dir__, '..', 'templates', 'status.html.erb')

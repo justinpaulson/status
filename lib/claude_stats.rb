@@ -1,6 +1,7 @@
 require 'json'
 require 'timeout'
 require 'net/http'
+require 'time'
 require 'uri'
 
 module ClaudeStats

@@ -113,24 +113,32 @@
   .fill-yellow { background: #d29922; }
   .fill-red { background: #f85149; }
 
-  /* Claude Code usage */
+  /* Usage cards */
+  .usage-body,
   .claude-usage-body {
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
+  .usage-row,
   .claude-usage-row {
     display: flex;
     align-items: center;
     gap: 12px;
   }
+  .usage-row-plain {
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .usage-label,
   .claude-usage-label {
     font-size: 12px;
     color: #8b949e;
-    min-width: 80px;
+    min-width: 86px;
     flex-shrink: 0;
   }
+  .usage-bar,
   .claude-usage-bar {
     flex: 1;
     height: 8px;
@@ -139,12 +147,14 @@
     overflow: visible;
     position: relative;
   }
+  .usage-bar .fill,
   .claude-usage-bar .fill {
     height: 100%;
     border-radius: 4px;
     transition: width 0.5s ease;
     overflow: hidden;
   }
+  .usage-pace-marker,
   .claude-pace-marker {
     position: absolute;
     top: -2px;
@@ -156,18 +166,29 @@
     z-index: 1;
     pointer-events: none;
   }
+  .usage-value,
   .claude-usage-pct {
     font-size: 18px;
     font-weight: 600;
     color: #f0f6fc;
-    min-width: 52px;
+    min-width: 70px;
     text-align: right;
   }
+  .usage-row-plain .usage-value {
+    flex: 1;
+    min-width: 120px;
+  }
+  .usage-reset,
   .claude-usage-reset {
     font-size: 11px;
     color: #484f58;
-    min-width: 90px;
+    min-width: 108px;
     text-align: right;
+  }
+  .usage-meta {
+    font-size: 11px;
+    color: #8b949e;
+    line-height: 1.5;
   }
 
   /* Service groups */
@@ -199,11 +220,13 @@
   .summary-ok { background: #3fb95020; color: #3fb950; }
   .summary-warn { background: #d2992220; color: #d29922; }
   .summary-err { background: #f8514920; color: #f85149; }
+  .usage-updated,
   .cc-updated {
     font-size: 11px;
     color: #8b949e;
     margin-left: 4px;
   }
+  .usage-updated.stale,
   .cc-updated.stale { color: #d29922; }
 
   .service-row {
@@ -480,6 +503,9 @@
     body { padding: 12px; }
     .system-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
     .stat-card .value { font-size: 18px; }
+    .usage-row { flex-wrap: wrap; }
+    .usage-row-plain .usage-value { text-align: left; min-width: 0; }
+    .usage-row-plain .usage-reset { min-width: auto; }
     .service-meta { gap: 8px; }
     .service-schedule { display: none; }
     .service-pid { display: none; }
@@ -504,19 +530,17 @@
 
 <div class="connection-lost" id="connection-lost">Connection to status server lost</div>
 
-<% if data[:claude_code] %>
 <%
-  cc = data[:claude_code]
-  cc_available = cc[:available]
-  cc_fill = ->(pct, pace) {
+  usage_fill = ->(pct, pace) {
+    pct = pct.to_f
     return 'fill-green' if pace.nil?
-    effective_pace = [pace, 5].max
+    effective_pace = [pace.to_f, 5].max
     ratio = pct / effective_pace
     ratio >= 1.1 ? 'fill-red' : ratio >= 0.85 ? 'fill-yellow' : 'fill-green'
   }
-  cc_reset = ->(iso) {
+  usage_reset = ->(iso) {
     return '' unless iso
-    t = Time.parse(iso)
+    t = Time.parse(iso.to_s)
     diff = t - Time.now
     if diff <= 0
       'now'
@@ -528,13 +552,35 @@
       "#{(diff / 86400).round}d"
     end
   }
-  cc_pace = ->(iso, period_secs) {
-    return nil unless iso
-    t = Time.parse(iso)
+  usage_pace = ->(iso, period_secs) {
+    return nil unless iso && period_secs&.positive?
+    t = Time.parse(iso.to_s)
     elapsed = period_secs - (t - Time.now)
     pct = (elapsed / period_secs.to_f) * 100
     pct.clamp(0, 100)
   }
+  usage_money = ->(amount, currency = 'usd') {
+    value = amount.to_f
+    label = currency.to_s.downcase == 'usd' ? '$' : "#{currency.to_s.upcase} "
+    precision = value.abs >= 100 ? 0 : 2
+    "#{label}#{format("%.#{precision}f", value)}"
+  }
+  usage_compact = ->(value) {
+    num = value.to_i
+    if num >= 1_000_000
+      "#{(num / 1_000_000.0).round(1)}M"
+    elsif num >= 1_000
+      "#{(num / 1_000.0).round(1)}K"
+    else
+      num.to_s
+    end
+  }
+%>
+
+<% if data[:claude_code] %>
+<%
+  cc = data[:claude_code]
+  cc_available = cc[:available]
   cc_weekly = cc_available && cc[:weekly] ? cc[:weekly] : { utilization: 0, resets_at: nil }
   cc_session = cc_available && cc[:session] ? cc[:session] : { utilization: 0, resets_at: nil }
 %>
@@ -546,27 +592,115 @@
       <span class="cc-updated" id="cc-updated" data-fetched-at="<%= cc[:fetched_at] %>">just now</span>
     <% end %>
   </div>
-  <div class="claude-usage-body">
-    <div class="claude-usage-row" id="cc-weekly-row">
-      <span class="claude-usage-label">Weekly</span>
-      <% wp = cc_pace.call(cc_weekly[:resets_at], 604800) %>
-      <div class="claude-usage-bar">
-        <div class="fill <%= cc_fill.call(cc_weekly[:utilization], wp) %>" style="width: <%= cc_weekly[:utilization] %>%"></div>
-        <div class="claude-pace-marker" style="left: <%= wp || 0 %>%<%= wp ? '' : '; display: none' %>"></div>
+  <div class="usage-body claude-usage-body">
+    <div class="usage-row claude-usage-row" id="cc-weekly-row">
+      <span class="usage-label claude-usage-label">Weekly</span>
+      <% wp = usage_pace.call(cc_weekly[:resets_at], 604800) %>
+      <div class="usage-bar claude-usage-bar">
+        <div class="fill <%= usage_fill.call(cc_weekly[:utilization], wp) %>" style="width: <%= [cc_weekly[:utilization].to_f, 100].min %>%"></div>
+        <div class="usage-pace-marker claude-pace-marker" style="left: <%= wp || 0 %>%<%= wp ? '' : '; display: none' %>"></div>
       </div>
-      <span class="claude-usage-pct"><%= cc_weekly[:utilization].round %>%</span>
-      <span class="claude-usage-reset"><%= cc_weekly[:resets_at] ? "resets #{cc_reset.call(cc_weekly[:resets_at])}" : '' %></span>
+      <span class="usage-value claude-usage-pct"><%= cc_weekly[:utilization].round %>%</span>
+      <span class="usage-reset claude-usage-reset"><%= cc_weekly[:resets_at] ? "resets #{usage_reset.call(cc_weekly[:resets_at])}" : '' %></span>
     </div>
-    <div class="claude-usage-row" id="cc-session-row">
-      <span class="claude-usage-label">5-Hour</span>
-      <% sp = cc_pace.call(cc_session[:resets_at], 18000) %>
-      <div class="claude-usage-bar">
-        <div class="fill <%= cc_fill.call(cc_session[:utilization], sp) %>" style="width: <%= cc_session[:utilization] %>%"></div>
-        <div class="claude-pace-marker" style="left: <%= sp || 0 %>%<%= sp ? '' : '; display: none' %>"></div>
+    <div class="usage-row claude-usage-row" id="cc-session-row">
+      <span class="usage-label claude-usage-label">5-Hour</span>
+      <% sp = usage_pace.call(cc_session[:resets_at], 18000) %>
+      <div class="usage-bar claude-usage-bar">
+        <div class="fill <%= usage_fill.call(cc_session[:utilization], sp) %>" style="width: <%= [cc_session[:utilization].to_f, 100].min %>%"></div>
+        <div class="usage-pace-marker claude-pace-marker" style="left: <%= sp || 0 %>%<%= sp ? '' : '; display: none' %>"></div>
       </div>
-      <span class="claude-usage-pct"><%= cc_session[:utilization].round %>%</span>
-      <span class="claude-usage-reset"><%= cc_session[:resets_at] ? "resets #{cc_reset.call(cc_session[:resets_at])}" : '' %></span>
+      <span class="usage-value claude-usage-pct"><%= cc_session[:utilization].round %>%</span>
+      <span class="usage-reset claude-usage-reset"><%= cc_session[:resets_at] ? "resets #{usage_reset.call(cc_session[:resets_at])}" : '' %></span>
     </div>
+  </div>
+</div>
+<% end %>
+
+<% if data[:openai_usage] %>
+<%
+  oa = data[:openai_usage]
+  oa_available = oa[:available]
+  oa_monthly = oa_available && oa[:monthly] ? oa[:monthly] : { cost: 0, currency: 'usd', budget: nil, utilization: 0, resets_at: nil }
+  oa_daily = oa_available && oa[:daily] ? oa[:daily] : { cost: 0, currency: 'usd', budget: nil, utilization: 0, resets_at: nil }
+  oa_completions = oa_available && oa[:completions] ? oa[:completions] : { requests: 0, total_tokens: 0 }
+  oa_period = oa[:period] || {}
+  oa_period_secs = if oa_period[:starts_at] && oa_period[:resets_at]
+    Time.parse(oa_period[:resets_at]) - Time.parse(oa_period[:starts_at])
+  else
+    nil
+  end
+  oa_monthly_pct = oa_monthly[:utilization] || 0
+  oa_daily_pct = oa_daily[:utilization] || 0
+  oa_monthly_pace = oa_monthly[:budget] ? usage_pace.call(oa_monthly[:resets_at], oa_period_secs) : nil
+  oa_daily_pace = oa_daily[:budget] ? usage_pace.call(oa_daily[:resets_at], 86_400) : nil
+%>
+<div class="group" id="openai-usage-group">
+  <div class="group-header">
+    <h2>OpenAI API Spend</h2>
+    <span class="group-summary <%= oa_available ? 'summary-ok' : 'summary-err' %>" id="oa-summary"><%= oa_available ? 'Usage' : 'Disconnected' %></span>
+    <% if oa_available && oa[:fetched_at] %>
+      <span class="usage-updated" id="oa-updated" data-fetched-at="<%= oa[:fetched_at] %>">just now</span>
+    <% end %>
+  </div>
+  <div class="usage-body">
+    <div class="usage-row" id="oa-monthly-row">
+      <span class="usage-label">Monthly</span>
+      <div class="usage-bar">
+        <div class="fill <%= usage_fill.call(oa_monthly_pct, oa_monthly_pace) %>" style="width: <%= [oa_monthly_pct.to_f, 100].min %>%"></div>
+        <div class="usage-pace-marker" style="left: <%= oa_monthly_pace || 0 %>%<%= oa_monthly_pace ? '' : '; display: none' %>"></div>
+      </div>
+      <span class="usage-value"><%= oa_monthly[:budget] ? "#{oa_monthly_pct.round}%" : usage_money.call(oa_monthly[:cost], oa_monthly[:currency]) %></span>
+      <span class="usage-reset"><%= oa_monthly[:budget] ? "#{usage_money.call(oa_monthly[:cost], oa_monthly[:currency])} / #{usage_money.call(oa_monthly[:budget], oa_monthly[:currency])}" : (oa_monthly[:resets_at] ? "resets #{usage_reset.call(oa_monthly[:resets_at])}" : '') %></span>
+    </div>
+    <div class="usage-row" id="oa-daily-row">
+      <span class="usage-label">Today</span>
+      <div class="usage-bar">
+        <div class="fill <%= usage_fill.call(oa_daily_pct, oa_daily_pace) %>" style="width: <%= [oa_daily_pct.to_f, 100].min %>%"></div>
+        <div class="usage-pace-marker" style="left: <%= oa_daily_pace || 0 %>%<%= oa_daily_pace ? '' : '; display: none' %>"></div>
+      </div>
+      <span class="usage-value"><%= usage_money.call(oa_daily[:cost], oa_daily[:currency]) %></span>
+      <span class="usage-reset"><%= oa_daily[:resets_at] ? "resets #{usage_reset.call(oa_daily[:resets_at])}" : '' %></span>
+    </div>
+    <div class="usage-meta" id="oa-meta"><%= oa_completions[:requests].to_i %> req &middot; <%= usage_compact.call(oa_completions[:total_tokens]) %> tokens this month</div>
+  </div>
+</div>
+<% end %>
+
+<% if data[:openai_subscription] %>
+<%
+  os = data[:openai_subscription]
+  os_available = os[:available]
+  os_windows = os_available && os[:windows] ? os[:windows] : {}
+  os_plan = os[:plan] || {}
+  os_rows = [
+    ['3 Hours', 'three_hour'],
+    ['Today', 'today'],
+    ['7 Days', 'seven_day'],
+    ['30 Days', 'thirty_day']
+  ]
+%>
+<div class="group" id="openai-subscription-group">
+  <div class="group-header">
+    <h2>OpenAI Subscription</h2>
+    <span class="group-summary <%= os_available ? 'summary-ok' : 'summary-err' %>" id="os-summary"><%= os_available ? 'Local Activity' : 'Unavailable' %></span>
+    <% if os_available && os[:fetched_at] %>
+      <span class="usage-updated" id="os-updated" data-fetched-at="<%= os[:fetched_at] %>">just now</span>
+    <% end %>
+  </div>
+  <div class="usage-body">
+    <% os_rows.each do |label, key| %>
+      <% window = os_windows[key.to_sym] || os_windows[key] || { tokens: 0, threads: 0 } %>
+      <div class="usage-row usage-row-plain" id="os-<%= key.tr('_', '-') %>-row">
+        <span class="usage-label"><%= label %></span>
+        <span class="usage-value"><%= usage_compact.call(window[:tokens]) %> tokens</span>
+        <span class="usage-reset"><%= window[:threads].to_i %> <%= window[:threads].to_i == 1 ? 'thread' : 'threads' %></span>
+      </div>
+    <% end %>
+    <div class="usage-meta" id="os-plan-meta">
+      <%= os_plan[:name] ? "#{os_plan[:name]} · #{os_plan[:limit_summary]}" : 'Plan not configured' %>
+    </div>
+    <div class="usage-meta" id="os-note"><%= os_available ? os[:note] : os[:reason] %></div>
   </div>
 </div>
 <% end %>
@@ -950,13 +1084,55 @@ document.addEventListener('keydown', function(e) {
     return 'fill-green';
   }
 
-  function updateCcTimestamp(fetchedAt) {
-    var el = document.getElementById('cc-updated');
+  function usageFill(pct, pace) {
+    pct = Number(pct || 0);
+    if (pace === null || pace === undefined) return 'fill-green';
+    var effectivePace = Math.max(Number(pace), 5);
+    var ratio = pct / effectivePace;
+    if (ratio >= 1.1) return 'fill-red';
+    if (ratio >= 0.85) return 'fill-yellow';
+    return 'fill-green';
+  }
+
+  function usageReset(iso) {
+    if (!iso) return '';
+    var diff = (new Date(iso) - Date.now()) / 1000;
+    if (diff <= 0) return 'now';
+    if (diff < 3600) return Math.round(diff / 60) + 'm';
+    if (diff < 86400) return Math.round(diff / 3600) + 'h';
+    return Math.round(diff / 86400) + 'd';
+  }
+
+  function usagePace(iso, periodSecs) {
+    if (!iso || !periodSecs) return null;
+    var resetTime = new Date(iso).getTime();
+    var now = Date.now();
+    var elapsed = periodSecs * 1000 - (resetTime - now);
+    var pct = (elapsed / (periodSecs * 1000)) * 100;
+    return Math.max(0, Math.min(100, pct));
+  }
+
+  function formatMoney(amount, currency) {
+    var value = Number(amount || 0);
+    var label = String(currency || 'usd').toLowerCase() === 'usd' ? '$' : String(currency || 'usd').toUpperCase() + ' ';
+    var decimals = Math.abs(value) >= 100 ? 0 : 2;
+    return label + value.toFixed(decimals);
+  }
+
+  function compactNumber(value) {
+    var num = Number(value || 0);
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(Math.round(num));
+  }
+
+  function updateUsageTimestamp(elementId, headerSelector, fetchedAt) {
+    var el = document.getElementById(elementId);
     if (!el && fetchedAt) {
       el = document.createElement('span');
-      el.id = 'cc-updated';
-      el.className = 'cc-updated';
-      var header = document.querySelector('#claude-code-group .group-header');
+      el.id = elementId;
+      el.className = 'usage-updated';
+      var header = document.querySelector(headerSelector);
       if (header) header.appendChild(el);
     }
     if (!el) return;
@@ -966,7 +1142,58 @@ document.addEventListener('keydown', function(e) {
     if (ageSecs < 60) el.textContent = 'just now';
     else if (ageSecs < 3600) el.textContent = Math.round(ageSecs / 60) + 'm ago';
     else el.textContent = Math.round(ageSecs / 3600) + 'h ago';
-    el.className = ageSecs > 120 ? 'cc-updated stale' : 'cc-updated';
+    var baseClass = elementId === 'cc-updated' ? 'cc-updated' : 'usage-updated';
+    el.className = ageSecs > 120 ? baseClass + ' stale' : baseClass;
+  }
+
+  function updateCcTimestamp(fetchedAt) {
+    updateUsageTimestamp('cc-updated', '#claude-code-group .group-header', fetchedAt);
+  }
+
+  function updateOaTimestamp(fetchedAt) {
+    updateUsageTimestamp('oa-updated', '#openai-usage-group .group-header', fetchedAt);
+  }
+
+  function updateOsTimestamp(fetchedAt) {
+    updateUsageTimestamp('os-updated', '#openai-subscription-group .group-header', fetchedAt);
+  }
+
+  function threadLabel(count) {
+    var num = Number(count || 0);
+    return num + ' ' + (num === 1 ? 'thread' : 'threads');
+  }
+
+  function updateUsageRow(rowId, fillPercent, valueText, resetText, pace) {
+    var row = document.getElementById(rowId);
+    if (!row) return;
+    var pct = Number(fillPercent || 0);
+    var fill = row.querySelector('.fill');
+    if (fill) {
+      fill.style.width = Math.min(Math.max(pct, 0), 100) + '%';
+      fill.className = 'fill ' + usageFill(pct, pace);
+    }
+    var valueEl = row.querySelector('.usage-value') || row.querySelector('.claude-usage-pct');
+    if (valueEl) valueEl.textContent = valueText || '';
+    var resetEl = row.querySelector('.usage-reset') || row.querySelector('.claude-usage-reset');
+    if (resetEl) resetEl.textContent = resetText || '';
+    var marker = row.querySelector('.usage-pace-marker') || row.querySelector('.claude-pace-marker');
+    if (marker) {
+      if (pace !== null && pace !== undefined) {
+        marker.style.left = pace + '%';
+        marker.style.display = '';
+      } else {
+        marker.style.display = 'none';
+      }
+    }
+  }
+
+  function updateSubscriptionRow(rowId, obj) {
+    var row = document.getElementById(rowId);
+    if (!row) return;
+    var valueEl = row.querySelector('.usage-value');
+    if (valueEl) valueEl.textContent = compactNumber(obj && obj.tokens) + ' tokens';
+    var resetEl = row.querySelector('.usage-reset');
+    if (resetEl) resetEl.textContent = threadLabel(obj && obj.threads);
   }
 
   function refresh() {
@@ -1032,62 +1259,117 @@ document.addEventListener('keydown', function(e) {
         // Update Claude Code usage
         var ccSummary = document.getElementById('cc-summary');
         if (ccSummary) {
-          var ccFill = function(pct, pace) {
-            if (pace === null || pace === undefined) return 'fill-green';
-            var effectivePace = Math.max(pace, 5);
-            var ratio = pct / effectivePace;
-            if (ratio >= 1.1) return 'fill-red';
-            if (ratio >= 0.85) return 'fill-yellow';
-            return 'fill-green';
-          };
-          var ccReset = function(iso) {
-            if (!iso) return '';
-            var diff = (new Date(iso) - Date.now()) / 1000;
-            if (diff <= 0) return 'now';
-            if (diff < 3600) return Math.round(diff / 60) + 'm';
-            if (diff < 86400) return Math.round(diff / 3600) + 'h';
-            return Math.round(diff / 86400) + 'd';
-          };
-          var ccPace = function(iso, periodSecs) {
-            if (!iso) return null;
-            var resetTime = new Date(iso).getTime();
-            var now = Date.now();
-            var elapsed = periodSecs * 1000 - (resetTime - now);
-            var pct = (elapsed / (periodSecs * 1000)) * 100;
-            return Math.max(0, Math.min(100, pct));
-          };
-          function updateRow(rowId, obj, periodSecs) {
-            var row = document.getElementById(rowId);
-            if (!row) return;
-            var fill = row.querySelector('.fill');
-            var pct = obj ? obj.utilization : 0;
-            var pace = obj ? ccPace(obj.resets_at, periodSecs) : null;
-            fill.style.width = pct + '%';
-            fill.className = 'fill ' + ccFill(pct, pace);
-            row.querySelector('.claude-usage-pct').textContent = Math.round(pct) + '%';
-            row.querySelector('.claude-usage-reset').textContent = obj && obj.resets_at ? 'resets ' + ccReset(obj.resets_at) : '';
-            var marker = row.querySelector('.claude-pace-marker');
-            if (marker) {
-              if (pace !== null) {
-                marker.style.left = pace + '%';
-                marker.style.display = '';
-              } else {
-                marker.style.display = 'none';
-              }
-            }
+          function updateClaudeRow(rowId, obj, periodSecs) {
+            var pct = obj ? Number(obj.utilization || 0) : 0;
+            var pace = obj ? usagePace(obj.resets_at, periodSecs) : null;
+            updateUsageRow(
+              rowId,
+              pct,
+              Math.round(pct) + '%',
+              obj && obj.resets_at ? 'resets ' + usageReset(obj.resets_at) : '',
+              pace
+            );
           }
           if (data.claude_code && data.claude_code.available) {
             ccSummary.textContent = 'Usage';
             ccSummary.className = 'group-summary summary-ok';
-            updateRow('cc-weekly-row', data.claude_code.weekly, 604800);
-            updateRow('cc-session-row', data.claude_code.session, 18000);
+            updateClaudeRow('cc-weekly-row', data.claude_code.weekly, 604800);
+            updateClaudeRow('cc-session-row', data.claude_code.session, 18000);
             updateCcTimestamp(data.claude_code.fetched_at);
           } else {
             ccSummary.textContent = 'Disconnected';
             ccSummary.className = 'group-summary summary-err';
-            updateRow('cc-weekly-row', null, 604800);
-            updateRow('cc-session-row', null, 18000);
+            updateClaudeRow('cc-weekly-row', null, 604800);
+            updateClaudeRow('cc-session-row', null, 18000);
             updateCcTimestamp(null);
+          }
+        }
+
+        // Update OpenAI API usage
+        var oaSummary = document.getElementById('oa-summary');
+        if (oaSummary) {
+          if (data.openai_usage && data.openai_usage.available) {
+            var oa = data.openai_usage;
+            var monthly = oa.monthly || {};
+            var daily = oa.daily || {};
+            var completions = oa.completions || {};
+            var periodSecs = null;
+            if (oa.period && oa.period.starts_at && oa.period.resets_at) {
+              periodSecs = (new Date(oa.period.resets_at) - new Date(oa.period.starts_at)) / 1000;
+            }
+            var monthlyPct = Number(monthly.utilization || 0);
+            var dailyPct = Number(daily.utilization || 0);
+            var monthlyPace = monthly.budget ? usagePace(monthly.resets_at, periodSecs) : null;
+            var dailyPace = daily.budget ? usagePace(daily.resets_at, 86400) : null;
+            var monthlyValue = monthly.budget ? Math.round(monthlyPct) + '%' : formatMoney(monthly.cost, monthly.currency);
+            var monthlyReset = monthly.budget
+              ? formatMoney(monthly.cost, monthly.currency) + ' / ' + formatMoney(monthly.budget, monthly.currency)
+              : (monthly.resets_at ? 'resets ' + usageReset(monthly.resets_at) : '');
+
+            oaSummary.textContent = 'Usage';
+            oaSummary.className = 'group-summary summary-ok';
+            updateUsageRow('oa-monthly-row', monthlyPct, monthlyValue, monthlyReset, monthlyPace);
+            updateUsageRow(
+              'oa-daily-row',
+              dailyPct,
+              formatMoney(daily.cost, daily.currency),
+              daily.resets_at ? 'resets ' + usageReset(daily.resets_at) : '',
+              dailyPace
+            );
+            var meta = document.getElementById('oa-meta');
+            if (meta) {
+              meta.textContent = Number(completions.requests || 0) + ' req · ' + compactNumber(completions.total_tokens) + ' tokens this month';
+            }
+            updateOaTimestamp(oa.fetched_at);
+          } else {
+            oaSummary.textContent = 'Disconnected';
+            oaSummary.className = 'group-summary summary-err';
+            updateUsageRow('oa-monthly-row', 0, '$0.00', '', null);
+            updateUsageRow('oa-daily-row', 0, '$0.00', '', null);
+            var emptyMeta = document.getElementById('oa-meta');
+            if (emptyMeta) emptyMeta.textContent = '0 req · 0 tokens this month';
+            updateOaTimestamp(null);
+          }
+        }
+
+        // Update OpenAI subscription activity
+        var osSummary = document.getElementById('os-summary');
+        if (osSummary) {
+          if (data.openai_subscription && data.openai_subscription.available) {
+            var os = data.openai_subscription;
+            var windows = os.windows || {};
+            var plan = os.plan || {};
+            osSummary.textContent = 'Local Activity';
+            osSummary.className = 'group-summary summary-ok';
+            updateSubscriptionRow('os-three-hour-row', windows.three_hour);
+            updateSubscriptionRow('os-today-row', windows.today);
+            updateSubscriptionRow('os-seven-day-row', windows.seven_day);
+            updateSubscriptionRow('os-thirty-day-row', windows.thirty_day);
+            var planMeta = document.getElementById('os-plan-meta');
+            if (planMeta) {
+              planMeta.textContent = plan.name
+                ? plan.name + ' · ' + (plan.limit_summary || 'limit summary unavailable')
+                : 'Plan not configured';
+            }
+            var note = document.getElementById('os-note');
+            if (note) note.textContent = os.note || '';
+            updateOsTimestamp(os.fetched_at);
+          } else {
+            osSummary.textContent = 'Unavailable';
+            osSummary.className = 'group-summary summary-err';
+            updateSubscriptionRow('os-three-hour-row', null);
+            updateSubscriptionRow('os-today-row', null);
+            updateSubscriptionRow('os-seven-day-row', null);
+            updateSubscriptionRow('os-thirty-day-row', null);
+            var emptyPlanMeta = document.getElementById('os-plan-meta');
+            if (emptyPlanMeta) emptyPlanMeta.textContent = 'Plan not configured';
+            var emptyNote = document.getElementById('os-note');
+            if (emptyNote) {
+              emptyNote.textContent = data.openai_subscription && data.openai_subscription.reason
+                ? data.openai_subscription.reason
+                : 'No local Codex subscription activity is available.';
+            }
+            updateOsTimestamp(null);
           }
         }
 
@@ -1159,9 +1441,17 @@ document.addEventListener('keydown', function(e) {
   setInterval(refresh, 15000);
   setInterval(updateTimestamp, 1000);
   setInterval(function() {
-    var el = document.getElementById('cc-updated');
-    if (el && el.getAttribute('data-fetched-at')) {
-      updateCcTimestamp(el.getAttribute('data-fetched-at'));
+    var ccEl = document.getElementById('cc-updated');
+    if (ccEl && ccEl.getAttribute('data-fetched-at')) {
+      updateCcTimestamp(ccEl.getAttribute('data-fetched-at'));
+    }
+    var oaEl = document.getElementById('oa-updated');
+    if (oaEl && oaEl.getAttribute('data-fetched-at')) {
+      updateOaTimestamp(oaEl.getAttribute('data-fetched-at'));
+    }
+    var osEl = document.getElementById('os-updated');
+    if (osEl && osEl.getAttribute('data-fetched-at')) {
+      updateOsTimestamp(osEl.getAttribute('data-fetched-at'));
     }
   }, 15000);
 })();
